@@ -29,6 +29,8 @@ Due to [some limitations of Electron builder](https://github.com/yarnpkg/berry/i
 
 We will explain the steps in the following sections.
 
+If you only want the Windows packaging pitfalls and the most recent working commands, see [build_setup_package.md](./build_setup_package.md).
+
 ## Prerequisites
 
 Before you start building AFFiNE Desktop Client Application, please following the same steps in [BUILDING#Prerequisites](./BUILDING.md#prerequisites) to install Node.js and Rust.
