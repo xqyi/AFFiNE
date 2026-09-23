@@ -50,13 +50,18 @@ function getTocHeading(panel: Locator, level: number) {
   return panel.getByTestId(`outline-block-preview-h${level}`).locator('span');
 }
 
-function getTocHeadingToggle(panel: Locator, level: number) {
-  // The heading span has data-testid="outline-block-preview-h<level>".
-  // Its parent (the outline row div) contains the toggle button.
+// A heading row in the panel is the `.outline-card_outlineRow` div inside
+// the note card; the toggle button (if any) is its first child, and the
+// preview `span` (with the testid) sits inside the following
+// `affine-outline-block-preview`. So the row is 3 levels above the span.
+function getTocHeadingRow(panel: Locator, level: number) {
   return panel
     .getByTestId(`outline-block-preview-h${level}`)
-    .locator('xpath=../..')
-    .getByTestId(/outline-toggle/);
+    .locator('xpath=../../..');
+}
+
+function getTocHeadingToggle(panel: Locator, level: number) {
+  return getTocHeadingRow(panel, level).getByTestId(/outline-toggle/);
 }
 
 async function toggleHeading(
@@ -69,6 +74,9 @@ async function toggleHeading(
   await toggle.first().click();
 }
 
+// Repeatedly click the toggle of every collapsible heading so that all
+// levels become visible. A heading's descendants stay hidden while it is
+// collapsed, so expand from the top down.
 async function expandAllHeadings(panel: Locator, maxLevel = 6) {
   for (let level = 1; level <= maxLevel; level++) {
     await toggleHeading(panel, level, { expand: true });
@@ -203,12 +211,16 @@ test.describe('TOC display', () => {
     await expect(toc.getByTestId('outline-block-preview-title')).toBeHidden();
 
     for (let i = 1; i <= 6; i++) {
+      // Clearing a heading removes it from the tree entirely, so the
+      // (now shallower) heading beneath it appears under its parent;
+      // expand the remaining ancestors so the visible assertion holds.
       await headings[i - 1].click();
       await type(page, 'xxx');
       await expect(getTocHeading(toc, i)).toContainText(`Heading ${i}xxx`);
       await selectAllByKeyboard(page);
       await pressBackspace(page);
       await expect(getTocHeading(toc, i)).toBeHidden();
+      if (i < 6) await expandAllHeadings(toc);
     }
   });
 

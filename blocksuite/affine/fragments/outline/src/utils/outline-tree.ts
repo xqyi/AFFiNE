@@ -31,6 +31,29 @@ function headingLevel(block: BlockModel): number {
 }
 
 /**
+ * Flatten a note's block tree into document order, descending recursively
+ * into container (hub) blocks so that headings nested inside them are
+ * included. This mirrors how the editor actually displays note content.
+ */
+function collectBlocks(
+  root: NoteBlockModel,
+  out: BlockModel[] = []
+): BlockModel[] {
+  for (const child of root.children) {
+    out.push(child);
+    const flavour = (child as { flavour?: string }).flavour;
+    if (
+      flavour === 'affine:callout' ||
+      flavour === 'affine:database' ||
+      flavour === 'affine:data-view'
+    ) {
+      collectBlocks(child as unknown as NoteBlockModel, out);
+    }
+  }
+  return out;
+}
+
+/**
  * Build a flat, document-ordered list of visible outline rows for a note.
  *
  * Visibility model (matches the UI toggle behaviour):
@@ -48,7 +71,7 @@ export function buildOutlineTree(
   note: NoteBlockModel,
   collapsed: ReadonlySet<string>
 ): OutlineRow[] {
-  const blocks = note.children;
+  const blocks = collectBlocks(note);
 
   const headingEntries: Array<{ id: string; level: number }> = [];
   for (const b of blocks) {
@@ -104,7 +127,7 @@ export function buildOutlineTree(
  * headings. Leaf headings are NOT in the set (they have nothing to hide).
  */
 export function defaultCollapsedForNote(note: NoteBlockModel): Set<string> {
-  const blocks = note.children;
+  const blocks = collectBlocks(note);
   const set = new Set<string>();
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
