@@ -20,6 +20,7 @@ import { repeat } from 'lit/directives/repeat.js';
 import { type TocContext, tocContext } from './config.js';
 import {
   buildOutlineTree,
+  collectHeadingBlocks,
   defaultCollapsedForNote,
 } from './utils/outline-tree.js';
 import { getNotesFromStore } from './utils/query.js';
@@ -279,9 +280,7 @@ export class OutlineViewer extends SignalWatcher(
     // every heading so scroll/highlight behaviour is unchanged.
     const items = [
       ...(this.editor.store.meta?.title !== '' ? [this.editor.store.root] : []),
-      ...notes.flatMap(note =>
-        buildOutlineTree(note, this._getCollapsed(note)).map(row => row.block)
-      ),
+      ...notes.flatMap(note => collectHeadingBlocks(note).map(b => b.block)),
     ];
 
     // The doc-title row (if any) is always part of `items`, so only bail
