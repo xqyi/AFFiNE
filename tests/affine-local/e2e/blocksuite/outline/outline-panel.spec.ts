@@ -50,6 +50,35 @@ function getTocHeading(panel: Locator, level: number) {
   return panel.getByTestId(`outline-block-preview-h${level}`).locator('span');
 }
 
+function getTocHeadingToggle(panel: Locator, level: number) {
+  // The heading span has data-testid="outline-block-preview-h<level>".
+  // Its parent (the outline row div) contains the toggle button.
+  return panel
+    .getByTestId(`outline-block-preview-h${level}`)
+    .locator('xpath=../..')
+    .getByTestId(/outline-toggle/);
+}
+
+async function toggleHeading(
+  panel: Locator,
+  level: number,
+  _opts: { expand?: boolean; collapse?: boolean }
+) {
+  const toggle = getTocHeadingToggle(panel, level);
+  if ((await toggle.count()) === 0) return;
+  await toggle.first().click();
+}
+
+async function expandAllHeadings(panel: Locator, maxLevel = 6) {
+  for (let level = 1; level <= maxLevel; level++) {
+    await toggleHeading(panel, level, { expand: true });
+  }
+}
+
+async function collapseTopHeading(panel: Locator) {
+  await toggleHeading(panel, 1, { collapse: true });
+}
+
 // locate cards in outline panel
 // ! Please note that when any card mode changed, the locator will be mutated
 function locateCards(toc: Locator, mode?: 'both' | 'page' | 'edgeless') {
@@ -87,11 +116,41 @@ test.describe('TOC display', () => {
 
     const toc = await openTocPanel(page);
 
+    // Headings are collapsed by default: only the top-level heading is
+    // visible until it is expanded.
     await expect(toc.getByTestId('outline-block-preview-title')).toBeVisible();
+    await expect(getTocHeading(toc, 1)).toBeVisible();
+    await expect(getTocHeading(toc, 1)).toContainText('Heading 1');
+    for (let i = 2; i <= 6; i++) {
+      await expect(getTocHeading(toc, i)).toBeHidden();
+    }
+
+    // Expanding headings level by level reveals the rest.
+    await expandAllHeadings(toc);
     for (let i = 1; i <= 6; i++) {
       await expect(getTocHeading(toc, i)).toBeVisible();
       await expect(getTocHeading(toc, i)).toContainText(`Heading ${i}`);
     }
+  });
+
+  test('should collapse a heading subtree when its toggle is clicked', async ({
+    page,
+  }) => {
+    await createTitle(page);
+    await createHeadings(page);
+
+    const toc = await openTocPanel(page);
+    await expandAllHeadings(toc);
+    for (let i = 1; i <= 6; i++) {
+      await expect(getTocHeading(toc, i)).toBeVisible();
+    }
+
+    // Collapsing Heading 1 hides all of its descendants.
+    await collapseTopHeading(toc);
+    for (let i = 2; i <= 6; i++) {
+      await expect(getTocHeading(toc, i)).toBeHidden();
+    }
+    await expect(getTocHeading(toc, 1)).toBeVisible();
   });
 
   test('should display placeholder when no headings', async ({ page }) => {
@@ -131,6 +190,7 @@ test.describe('TOC display', () => {
     const headings = await createHeadings(page);
 
     const toc = await openTocPanel(page);
+    await expandAllHeadings(toc);
 
     await title.scrollIntoViewIfNeeded();
     await title.click();
@@ -168,6 +228,7 @@ test.describe('TOC display', () => {
     await createHeadings(page);
 
     const toc = await openTocPanel(page);
+    await expandAllHeadings(toc);
 
     let prev = getTocHeading(toc, 1);
     for (let i = 2; i <= 6; i++) {
@@ -244,6 +305,7 @@ test.describe('TOC and editor scroll', () => {
     await title.scrollIntoViewIfNeeded();
 
     const toc = await openTocPanel(page);
+    await expandAllHeadings(toc);
 
     const viewportCenter = await getVerticalCenterFromLocator(
       page.locator('body')
@@ -270,6 +332,7 @@ test.describe('TOC and editor scroll', () => {
   }) => {
     const headings = await createHeadings(page, 10);
     const toc = await openTocPanel(page);
+    await expandAllHeadings(toc);
 
     const activeHeadingContainer = toc.locator(
       'affine-outline-panel-body .active'
@@ -292,6 +355,7 @@ test.describe('TOC and editor scroll', () => {
     await createHeadings(page, 10);
 
     const toc = await openTocPanel(page);
+    await expandAllHeadings(toc);
 
     const titleInPanel = toc.getByTestId('outline-block-preview-title');
 

@@ -1,3 +1,4 @@
+import type { NoteBlockModel } from '@blocksuite/affine-model';
 import { NoteDisplayMode } from '@blocksuite/affine-model';
 import { DocModeProvider } from '@blocksuite/affine-shared/services';
 import { scrollbarStyle } from '@blocksuite/affine-shared/styles';
@@ -17,7 +18,11 @@ import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 
 import { type TocContext, tocContext } from './config.js';
-import { getHeadingBlocksFromDoc } from './utils/query.js';
+import {
+  buildOutlineTree,
+  defaultCollapsedForNote,
+} from './utils/outline-tree.js';
+import { getNotesFromStore } from './utils/query.js';
 import {
   observeActiveHeadingDuringScroll,
   scrollToBlockWithHighlight,
@@ -130,6 +135,20 @@ export class OutlineViewer extends SignalWatcher(
       width: 100%;
     }
 
+    .outline-viewer-item-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1em;
+      height: 1em;
+      margin-right: 4px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--affine-icon-primary-color);
+    }
+
     .outline-viewer-root:hover {
       .outline-viewer-indicators-container {
         visibility: hidden;
@@ -149,6 +168,31 @@ export class OutlineViewer extends SignalWatcher(
   `;
 
   private readonly _activeHeadingId$ = signal<string | null>(null);
+
+  private readonly _collapsedNotes$ = new Map<string, Set<string>>();
+
+  private _getCollapsed(note: NoteBlockModel) {
+    let set = this._collapsedNotes$.get(note.id);
+    if (!set) {
+      set = defaultCollapsedForNote(note);
+      this._collapsedNotes$.set(note.id, set);
+    }
+    return set;
+  }
+
+  private _toggleNoteHeading(
+    note: NoteBlockModel,
+    rowId: string,
+    wasCollapsed: boolean
+  ) {
+    const set = this._getCollapsed(note);
+    if (wasCollapsed) {
+      set.delete(rowId);
+    } else {
+      set.add(rowId);
+    }
+    this.requestUpdate();
+  }
 
   private _highlightMaskDisposable = () => {};
 
@@ -226,18 +270,28 @@ export class OutlineViewer extends SignalWatcher(
     const mode = docModeService.getEditorMode();
     if (this.editor.store.root === null || mode === 'edgeless') return nothing;
 
-    const headingBlocks = getHeadingBlocksFromDoc(
-      this.editor.store,
-      [NoteDisplayMode.DocAndEdgeless, NoteDisplayMode.DocOnly],
-      true
-    );
+    const notes = getNotesFromStore(this.editor.store, [
+      NoteDisplayMode.DocAndEdgeless,
+      NoteDisplayMode.DocOnly,
+    ]);
 
-    if (headingBlocks.length === 0) return nothing;
-
+    // Rows are collapsed by default per note; the indicators still cover
+    // every heading so scroll/highlight behaviour is unchanged.
     const items = [
       ...(this.editor.store.meta?.title !== '' ? [this.editor.store.root] : []),
-      ...headingBlocks,
+      ...notes.flatMap(note =>
+        buildOutlineTree(note, this._getCollapsed(note)).map(row => row.block)
+      ),
     ];
+
+    // The doc-title row (if any) is always part of `items`, so only bail
+    // out when there is no title AND no visible heading row in any note.
+    const hasVisibleRows = notes.some(
+      note => buildOutlineTree(note, this._getCollapsed(note)).length > 0
+    );
+    if (!hasVisibleRows && this.editor.store.meta?.title === '') {
+      return nothing;
+    }
 
     const toggleOutlinePanelButton =
       this.toggleOutlinePanel !== null
@@ -274,28 +328,64 @@ export class OutlineViewer extends SignalWatcher(
             <span>Table of Contents</span>
             ${toggleOutlinePanelButton}
           </div>
-          ${repeat(
-            items,
-            block => block.id,
-            block => {
-              return html`<div
-                class=${classMap({
-                  'outline-viewer-item': true,
-                  active: this._activeHeadingId$.value === block.id,
-                })}
-              >
-                <affine-outline-block-preview
+          ${notes.flatMap(note =>
+            buildOutlineTree(note, this._getCollapsed(note)).map(
+              row =>
+                html`<div
                   class=${classMap({
-                    active: this._activeHeadingId$.value === block.id,
+                    'outline-viewer-item': true,
+                    active: this._activeHeadingId$.value === row.block.id,
                   })}
-                  .block=${block}
-                  @click=${() => {
-                    this._scrollToBlock(block.id).catch(console.error);
-                  }}
                 >
-                </affine-outline-block-preview>
-              </div>`;
-            }
+                  ${
+                    row.hasChildren
+                      ? html`<button
+                          class=${'outline-viewer-item-toggle'}
+                          data-testid=${`outline-toggle-${row.block.id}`}
+                          @click=${(e: MouseEvent) => {
+                            e.stopPropagation();
+                            this._toggleNoteHeading(
+                              note,
+                              row.block.id,
+                              row.collapsed
+                            );
+                          }}
+                        >
+                          ${
+                            row.collapsed
+                              ? html`<svg
+                                  style="transform: rotate(-90deg)"
+                                  data-icon="chevron"
+                                  viewBox="0 0 16 16"
+                                  width="1em"
+                                  height="1em"
+                                >
+                                  <path fill="currentColor" d="M4 6l4 4 4-4" />
+                                </svg>`
+                              : html`<svg
+                                  data-icon="chevron"
+                                  viewBox="0 0 16 16"
+                                  width="1em"
+                                  height="1em"
+                                >
+                                  <path fill="currentColor" d="M4 6l4 4 4-4" />
+                                </svg>`
+                          }
+                        </button>`
+                      : nothing
+                  }
+                  <affine-outline-block-preview
+                    class=${classMap({
+                      active: this._activeHeadingId$.value === row.block.id,
+                    })}
+                    .block=${row.block}
+                    @click=${() => {
+                      this._scrollToBlock(row.block.id).catch(console.error);
+                    }}
+                  >
+                  </affine-outline-block-preview>
+                </div>`
+            )
           )}
         </div>
       </div>

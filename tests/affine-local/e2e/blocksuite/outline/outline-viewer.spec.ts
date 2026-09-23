@@ -82,7 +82,7 @@ test('should update indicator when clear title or headings', async ({
   }
 });
 
-test('should display simple outline panel when hovering over indicators', async ({
+test('should display collapsed outline panel by default when hovering', async ({
   page,
 }) => {
   const indicators = getIndicators(page);
@@ -90,19 +90,77 @@ test('should display simple outline panel when hovering over indicators', async 
   await createHeadings(page);
   await indicators.first().hover({ force: true });
 
-  const items = page.locator('.outline-viewer-item');
-  await expect(items).toHaveCount(8);
-  await expect(items.nth(0)).toContainText(['Table of Contents']);
-  await expect(items.nth(1)).toContainText(['Title']);
-  for (let i = 2; i <= 7; i++) {
-    await expect(items.nth(i)).toContainText([`Heading ${i - 1}`]);
-  }
+  // Panel is collapsed by default: doc title + only the top-level h1 rows
+  // are visible; h2-h6 are hidden under their collapsed ancestors.
+  const items = page.locator(
+    '.outline-viewer-item:not(.outline-viewer-header)'
+  );
+  await expect(items).toHaveCount(2); // Title + Heading 1
+  await expect(items.nth(0)).toContainText(['Title']);
+  await expect(items.nth(1)).toContainText(['Heading 1']);
+});
+
+test('expand a heading reveals its direct children only', async ({ page }) => {
+  const indicators = getIndicators(page);
+  await createTitle(page);
+  await createHeadings(page);
+  await indicators.first().hover({ force: true });
+
+  const viewer = page.locator('affine-outline-viewer');
+  const h1 = viewer.getByTestId('outline-block-preview-h1');
+  await expect(h1).toBeVisible();
+
+  // h1 is collapsible (it has h2..h6 descendants) and collapsed by default.
+  const h1Toggle = h1.locator('xpath=..').getByTestId(/outline-toggle/);
+  await h1Toggle.click();
+
+  // Expanding h1 reveals its direct children (h2). h3-h6 stay hidden.
+  await expect(viewer.getByTestId('outline-block-preview-h2')).toBeVisible();
+  await expect(viewer.getByTestId('outline-block-preview-h3')).toBeHidden();
+
+  // Expanding h2 reveals h3.
+  const h2Toggle = viewer
+    .getByTestId('outline-block-preview-h2')
+    .locator('xpath=..')
+    .getByTestId(/outline-toggle/);
+  await h2Toggle.click();
+  await expect(viewer.getByTestId('outline-block-preview-h3')).toBeVisible();
+});
+
+test('collapsing a heading hides all its descendants', async ({ page }) => {
+  const indicators = getIndicators(page);
+  await createTitle(page);
+  await createHeadings(page);
+  await indicators.first().hover({ force: true });
+
+  const viewer = page.locator('affine-outline-viewer');
+  // Expand h1 and h2 so h3 becomes visible.
+  await viewer
+    .getByTestId('outline-block-preview-h1')
+    .locator('xpath=..')
+    .getByTestId(/outline-toggle/)
+    .click();
+  await viewer
+    .getByTestId('outline-block-preview-h2')
+    .locator('xpath=..')
+    .getByTestId(/outline-toggle/)
+    .click();
+  await expect(viewer.getByTestId('outline-block-preview-h3')).toBeVisible();
+
+  // Collapse h1: everything under it (h2, h3, ...) is hidden at once.
+  await viewer
+    .getByTestId('outline-block-preview-h1')
+    .locator('xpath=..')
+    .getByTestId(/outline-toggle/)
+    .click();
+  await expect(viewer.getByTestId('outline-block-preview-h2')).toBeHidden();
+  await expect(viewer.getByTestId('outline-block-preview-h3')).toBeHidden();
 });
 
 test('should highlight indicator when scrolling', async ({ page }) => {
   const indicators = getIndicators(page);
   const title = await createTitle(page);
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 0; i < 3; i++) {
     await pressEnter(page);
   }
   const headings = await createHeadings(page, 10);
@@ -128,12 +186,10 @@ test('should highlight indicator when click item in outline panel', async ({
 
   await indicators.first().hover({ force: true });
 
-  const headingsInPanel = Array.from({ length: 6 }, (_, i) =>
-    viewer.getByTestId(`outline-block-preview-h${i + 1}`)
-  );
-  await headingsInPanel[2].click();
-  await expect(headings[2]).toBeVisible();
-  await expect(indicators.nth(2)).toHaveClass(/active/);
+  // Click the visible top-level h1 item to scroll and activate it.
+  await viewer.getByTestId('outline-block-preview-h1').click();
+  await expect(headings[0]).toBeVisible();
+  await expect(indicators.nth(0)).toHaveClass(/active/);
 });
 
 test('outline viewer should hide in edgeless mode', async ({ page }) => {
@@ -246,13 +302,14 @@ test('outline viewer should be useable in doc peek preview', async ({
 
   // position of outline viewer should be fixed
   {
+    // Collapsed by default: only Title + top-level Heading 1 are shown
+    // (Heading 2 is hidden under its collapsed ancestor).
     const headingButtons = peekView.locator(
       'affine-outline-viewer .outline-viewer-item:not(.outline-viewer-header)'
     );
-    await expect(headingButtons).toHaveCount(3);
+    await expect(headingButtons).toHaveCount(2);
     await expect(headingButtons.nth(0)).toBeVisible();
     await expect(headingButtons.nth(1)).toBeVisible();
-    await expect(headingButtons.nth(2)).toBeVisible();
 
     await headingButtons.last().click();
     await page.mouse.move(0, 0);
