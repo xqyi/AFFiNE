@@ -164,3 +164,31 @@ export const modeChangePanel = style({
     },
   },
 });
+
+export const outlineRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '2px',
+});
+
+export const toggle = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '1.2em',
+  height: '1.2em',
+  border: 'none',
+  background: 'transparent',
+  cursor: 'pointer',
+  color: cssVarV2('icon/primary'),
+  transition: 'transform 150ms ease',
+  selectors: {
+    '&:hover': {
+      color: cssVarV2('icon/emphasis'),
+    },
+  },
+});
+
+export const toggleCollapsed = style({
+  transform: 'rotate(-90deg)',
+});

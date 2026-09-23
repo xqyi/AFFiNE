@@ -57,7 +57,7 @@ export const text = style({
 
 export const textGeneral = style({
   fontWeight: 400,
-  paddingLeft: '28px',
+  paddingLeft: '6em',
 });
 
 export const subtypeStyles = {
@@ -71,23 +71,23 @@ export const subtypeStyles = {
   }),
   h2: style({
     fontWeight: 600,
-    paddingLeft: '4px',
+    paddingLeft: '1em',
   }),
   h3: style({
     fontWeight: 600,
-    paddingLeft: '12px',
+    paddingLeft: '2em',
   }),
   h4: style({
     fontWeight: 600,
-    paddingLeft: '16px',
+    paddingLeft: '3em',
   }),
   h5: style({
     fontWeight: 600,
-    paddingLeft: '20px',
+    paddingLeft: '4em',
   }),
   h6: style({
     fontWeight: 600,
-    paddingLeft: '24px',
+    paddingLeft: '5em',
   }),
 };
 

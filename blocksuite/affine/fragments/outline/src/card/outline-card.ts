@@ -7,13 +7,18 @@ import type { BlockModel } from '@blocksuite/store';
 import { consume, ContextProvider } from '@lit/context';
 import { signal } from '@preact/signals-core';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { html } from 'lit';
+import { html, nothing } from 'lit';
 import { property, query } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
 import { type TocContext, tocContext } from '../config';
 import type { SelectEvent } from '../utils/custom-events';
 import type { NoteCardEntity, NoteDropPayload } from '../utils/drag';
+import {
+  buildOutlineTree,
+  defaultCollapsedForNote,
+  type OutlineRow,
+} from '../utils/outline-tree.js';
 import * as styles from './outline-card.css';
 
 export const AFFINE_OUTLINE_NOTE_CARD = 'affine-outline-note-card';
@@ -25,6 +30,26 @@ export class OutlineNoteCard extends SignalWatcher(
     null;
 
   private readonly _showPopper$ = signal(false);
+
+  private _collapsedHeadings$: Set<string> | null = null;
+
+  private get _collapsedHeadings() {
+    if (!this._collapsedHeadings$) {
+      this._collapsedHeadings$ = defaultCollapsedForNote(this.note);
+    }
+    return this._collapsedHeadings$;
+  }
+
+  private _toggleHeading(row: OutlineRow) {
+    const set = new Set(this._collapsedHeadings);
+    if (row.collapsed) {
+      set.delete(row.block.id);
+    } else {
+      set.add(row.block.id);
+    }
+    this._collapsedHeadings$ = set;
+    this.requestUpdate();
+  }
 
   private _dispatchClickBlockEvent(block: BlockModel) {
     const event = new CustomEvent('clickblock', {
@@ -169,7 +194,6 @@ export class OutlineNoteCard extends SignalWatcher(
 
   override render() {
     const { displayMode } = this.note.props;
-    const { children } = this.note;
     const currentMode = this._getCurrentModeLabel(displayMode);
     const invisible =
       this.note.props.displayMode$.value === NoteDisplayMode.EdgelessOnly;
@@ -231,16 +255,37 @@ export class OutlineNoteCard extends SignalWatcher(
           </note-display-mode-panel>
         </div>`}
           <div class=${styles.cardContent}>
-            ${children.map(block => {
-              return html`<affine-outline-block-preview
-                class=${classMap({ active: this.activeHeadingId === block.id })}
-                .block=${block}
-                .disabledIcon=${invisible}
-                @click=${() => {
-                  if (invisible) return;
-                  this._dispatchClickBlockEvent(block);
-                }}
-              ></affine-outline-block-preview>`;
+            ${buildOutlineTree(this.note, this._collapsedHeadings).map(row => {
+              return html`<div class=${styles.outlineRow}>
+                ${
+                  row.hasChildren
+                    ? html`<button
+                        class=${classMap({
+                          [styles.toggle]: true,
+                          [styles.toggleCollapsed]: row.collapsed,
+                        })}
+                        data-testid=${`outline-toggle-${row.block.id}`}
+                        @click=${(e: MouseEvent) => {
+                          e.stopPropagation();
+                          this._toggleHeading(row);
+                        }}
+                      >
+                        ${ArrowDownSmallIcon({ width: '1em', height: '1em' })}
+                      </button>`
+                    : nothing
+                }
+                <affine-outline-block-preview
+                  class=${classMap({
+                    active: this.activeHeadingId === row.block.id,
+                  })}
+                  .block=${row.block}
+                  .disabledIcon=${invisible}
+                  @click=${() => {
+                    if (invisible) return;
+                    this._dispatchClickBlockEvent(row.block);
+                  }}
+                ></affine-outline-block-preview>
+              </div>`;
             })}
             </div>
           </div>
