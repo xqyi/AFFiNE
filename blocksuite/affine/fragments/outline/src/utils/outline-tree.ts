@@ -27,7 +27,7 @@ function headingLevel(block: BlockModel): number {
   if (!isHeadingBlock(block)) return 0;
   const type = (block as { props: { type$: { value: string } } }).props.type$
     .value;
-  return Number(type.slice(1)) || 0;
+  return Number(type.slice(1)) || 7;
 }
 
 /**
@@ -119,6 +119,22 @@ export function buildOutlineTree(
   }
 
   return rows;
+}
+
+/**
+ * Collect every heading block in a note, regardless of collapse state.
+ * Used for the scroll-indicator rail, which must track all headings even
+ * when their ancestors are collapsed.
+ */
+export function collectHeadingBlocks(note: NoteBlockModel): Array<{
+  id: string;
+  block: BlockModel;
+}> {
+  const blocks = collectBlocks(note);
+  return blocks.filter(isHeadingBlock).map(block => ({
+    id: block.id,
+    block,
+  }));
 }
 
 /**
