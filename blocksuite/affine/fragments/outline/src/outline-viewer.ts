@@ -136,6 +136,17 @@ export class OutlineViewer extends SignalWatcher(
       width: 100%;
     }
 
+    /* Hover: highlight only the node text, no background. */
+    .outline-viewer-item:not(.outline-viewer-header):hover
+      affine-outline-block-preview {
+      color: var(--affine-text-primary-color);
+    }
+
+    /* Active heading: emphasise the node text. */
+    .outline-viewer-item.active affine-outline-block-preview {
+      color: var(--affine-text-primary-color);
+    }
+
     .outline-viewer-item-toggle {
       display: inline-flex;
       align-items: center;
@@ -148,6 +159,14 @@ export class OutlineViewer extends SignalWatcher(
       background: transparent;
       cursor: pointer;
       color: var(--affine-icon-primary-color);
+    }
+
+    .outline-viewer-item-toggle-spacer {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      flex-shrink: 0;
+      margin-right: 4px;
     }
 
     .outline-viewer-root:hover {
@@ -371,7 +390,9 @@ export class OutlineViewer extends SignalWatcher(
                                 </svg>`
                           }
                         </button>`
-                      : nothing
+                      : html`<span
+                          class="outline-viewer-item-toggle-spacer"
+                        ></span>`
                   }
                   <affine-outline-block-preview
                     class=${classMap({

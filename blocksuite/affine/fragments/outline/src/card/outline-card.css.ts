@@ -166,17 +166,17 @@ export const modeChangePanel = style({
 });
 
 export const outlineRow = style({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '2px',
+  display: 'block',
 });
 
 export const toggle = style({
   display: 'inline-flex',
+  flexShrink: 0,
   alignItems: 'center',
   justifyContent: 'center',
   width: '1.2em',
   height: '1.2em',
+  marginRight: '0',
   border: 'none',
   background: 'transparent',
   cursor: 'pointer',
@@ -191,4 +191,11 @@ export const toggle = style({
 
 export const toggleCollapsed = style({
   transform: 'rotate(-90deg)',
+});
+
+export const toggleSpacer = style({
+  display: 'inline-block',
+  width: '1.2em',
+  height: '1.2em',
+  flexShrink: 0,
 });

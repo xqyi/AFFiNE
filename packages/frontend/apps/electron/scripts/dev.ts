@@ -33,6 +33,12 @@ function spawnOrReloadElectron() {
 
   const ext = process.platform === 'win32' ? '.cmd' : '';
   const exe = resolve(rootDir, 'node_modules', '.bin', `electron${ext}`);
+  // Windows: spawn the electron binary directly instead of the .bin/.cmd
+  // shim (the shim path carries a trailing newline that breaks spawn()).
+  const exePath =
+    process.platform === 'win32'
+      ? resolve(rootDir, 'node_modules', 'electron', 'dist', 'electron.exe')
+      : exe;
 
   // remove import loader option
   const NODE_OPTIONS = process.env.NODE_OPTIONS;
@@ -40,7 +46,7 @@ function spawnOrReloadElectron() {
     process.env.NODE_OPTIONS = NODE_OPTIONS.replace(/--import=[^\s]*/, '');
   }
 
-  spawnProcess = spawn(exe, ['.', '--inspect'], {
+  spawnProcess = spawn(exePath, ['.', '--inspect'], {
     cwd: electronDir,
     env: process.env,
     shell: true,

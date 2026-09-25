@@ -2,13 +2,13 @@
   "name": "@affine/electron",
   "private": true,
   "version": "0.27.5",
-  "main": "./dist/main.js",
+  "main": "dist/main.js",
   "author": "toeverything",
   "repository": {
     "url": "https://github.com/toeverything/AFFiNE",
     "type": "git"
   },
-  "description": "AFFiNE Desktop App",
+  "description": "AFFiNE - the all-in-one knowledge base",
   "homepage": "https://github.com/toeverything/AFFiNE",
   "exports": {
     "./helper/exposed": "./src/helper/exposed.ts",

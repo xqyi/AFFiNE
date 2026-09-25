@@ -87,6 +87,28 @@ export function buildOutlineTree(
     );
   }
 
+  // "hasChild" marks the nearest open ancestor of every heading, using the
+  // same stack rule as the collapse logic below: a strictly-deeper heading
+  // becomes a child only when no shallower-or-equal heading has closed the
+  // branch in between. This keeps an H2 that is directly followed by an H4
+  // (skipping H3) a leaf, instead of showing an expand arrow.
+  const hasChild = new Map<string, boolean>();
+  {
+    const childStack: Array<{ level: number; id: string }> = [];
+    for (const h of headingEntries) {
+      while (
+        childStack.length > 0 &&
+        childStack[childStack.length - 1].level >= h.level
+      ) {
+        childStack.pop();
+      }
+      if (childStack.length > 0) {
+        hasChild.set(childStack[childStack.length - 1].id, true);
+      }
+      childStack.push({ level: h.level, id: h.id });
+    }
+  }
+
   const rows: OutlineRow[] = [];
   // Stack of visible (open) ancestor headings. A heading is pushed only when
   // it is NOT in the collapsed set — its children are visible only in that case.
@@ -101,6 +123,8 @@ export function buildOutlineTree(
       openStack.pop();
     }
 
+    // A collapsed ancestor only hides its own descendant branch. A
+    // shallower sibling that follows still shows.
     const ancestorCollapsed = openStack.some(a => collapsed.has(a.id));
     const selfCollapsed = collapsed.has(id);
 
@@ -108,13 +132,16 @@ export function buildOutlineTree(
       rows.push({
         block,
         collapsed: selfCollapsed,
-        hasChildren: hasDescendant.get(id) ?? false,
+        hasChildren: hasChild.get(id) ?? false,
       });
     }
 
-    // Push every visible heading onto the stack. A collapsed heading is
-    // still an ancestor of the deeper headings that follow it — those must
-    // stay hidden while it is collapsed.
+    // Push every heading onto the open stack. A collapsed heading still
+    // acts as a closing boundary for the *strictly-deeper* headings that
+    // follow it — they stay hidden while it is collapsed. But a shallower
+    // sibling that comes after still shows: when the next heading is not
+    // strictly deeper than the top of the stack, the stack unwinds to the
+    // nearest open ancestor, so the collapsed entry no longer shadows it.
     openStack.push({ level, id });
   }
 
@@ -144,15 +171,25 @@ export function collectHeadingBlocks(note: NoteBlockModel): Array<{
  */
 export function defaultCollapsedForNote(note: NoteBlockModel): Set<string> {
   const blocks = collectBlocks(note);
+  // Default: H1 headings are expanded (their children are visible); every
+  // heading deeper than H1 is collapsed, so the panel initially shows
+  // top-level (H1) branches plus the content directly under each H1.
   const set = new Set<string>();
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
+  const childStack: Array<{ level: number; id: string }> = [];
+  for (const b of blocks) {
     if (!isHeadingBlock(b)) continue;
     const level = headingLevel(b);
-    const hasDeeperAfter = blocks
-      .slice(i + 1)
-      .some(o => isHeadingBlock(o) && headingLevel(o) > level);
-    if (hasDeeperAfter) set.add(b.id);
+    while (
+      childStack.length > 0 &&
+      childStack[childStack.length - 1].level >= level
+    ) {
+      childStack.pop();
+    }
+    // 只有 H2 及更深的节点默认折叠；H1 保持展开（其子节点默认可见）
+    if (level >= 2) {
+      set.add(b.id);
+    }
+    childStack.push({ level, id: b.id });
   }
   return set;
 }
