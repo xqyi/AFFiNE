@@ -84,6 +84,14 @@ Copy-Item "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\dist\main.js" "$reso
 # 复制 electron 的 package.json 到 resources/app
 Copy-Item "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\package.json" "$resourcesApp\package.json" -Force
 
+# 注入 productName（模拟 forge readPackageJson hook；canary build）。
+# 不做这步 app.name 回退到 name='@affine/electron'，主窗口标题会显示 @affine/electron。
+& $NODE22 -e 'import("node:fs").then(m=>{const p=process.argv[1];const j=JSON.parse(m.readFileSync(p,"utf8"));j.productName="AFFiNE-canary";m.writeFileSync(p,JSON.stringify(j,null,2));console.log("productName->",j.productName)})' "$resourcesApp\package.json"
+# 稳定版（stable）应改为 "AFFiNE"。
+
+# 复制 icons 到 resources/app/resources/icons（主进程托盘/窗口图标依赖，缺了会回退 Electron 默认）
+robocopy "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons" "$resourcesApp\resources\icons" /E /NFL /NDL /NJH /NJS
+
 # 复制 web-static 到 resources/app
 robocopy "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\web-static" "$resourcesApp\resources\web-static" /MIR /NFL /NDL /NJH /NJS
 
@@ -296,6 +304,21 @@ $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
 ```
 
 **验证：** rcedit 成功后 exe 大小会增大（约 +16KB），mtime 更新；但 `VersionInfo`（CompanyName/FileDescription）仍显示 Electron——这是正常的，rcedit 只改图标资源，不改 version info。真正生效的是 exe 的内嵌图标资源，资源管理器会显示 AFFiNE。务必在 `createWindowsInstaller` 之前完成嵌入，否则 Setup.exe 里的 exe 仍是 Electron 图标。
+
+### 坑 8：手动打包需注入 productName + 复制 icons，否则标题/图标是 Electron
+
+**现象：** 运行后窗口标题显示 `@affine/electron`（不是 `AFFiNE-canary`），任务栏图标仍是 Electron 默认。
+
+**根因：** 这两条都源于手动打包目录 `resources/app/` 不完整：
+
+- **标题**：主窗口（`createMainWindow`）未显式设 `title`，Electron 回退到 `app.name` = 打包目录 `resources/app/package.json` 的 `productName ?? name`。官方 forge 的 `readPackageJson` hook 会注入 `productName`（canary=`AFFiNE-canary`，stable=`AFFiNE`）；手动 `Copy-Item` 跳过了注入，`name=@affine/electron`、`productName=undefined`，标题就成了 `@affine/electron`。
+- **图标**：主进程托盘/窗口图标走 `resources/app/resources/icons/*`（`nativeImage.createFromPath(icons.tray)` 等）。手动打包若只复制了 `web-static`、没复制 `icons/`，这些路径解析不到，图标回退默认。
+
+**修复（已并入步骤 4 标准流程）：**
+
+- 打包后给 `resources/app/package.json` 注入 `productName`（canary=`AFFiNE-canary`，stable=`AFFiNE`），`app.name` 正确后标题即显示应用名。
+- `robocopy resources/icons → resources/app/resources/icons`，补齐托盘/窗口图标素材。
+- 重跑 rcedit（坑 7）嵌入 exe 图标后，**重装** Squirrel（`%LOCALAPPDATA%\apps\AFFiNE-canary` 那份 exe 才会带上图标），任务栏图标才更新——光改 `out/` 里的 exe 不重装，任务栏不变。
 
 ## 构建/打包注意事项（务必遵守，踩过坑）
 
