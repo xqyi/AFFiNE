@@ -12,7 +12,7 @@ import { DocDisplayMetaProvider } from '@blocksuite/affine-shared/services';
 import type { AffineTextAttributes } from '@blocksuite/affine-shared/types';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { noop } from '@blocksuite/global/utils';
-import { LinkedPageIcon } from '@blocksuite/icons/lit';
+import { ArrowDownSmallIcon, LinkedPageIcon } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
 import type { BlockModel, DeltaInsert } from '@blocksuite/store';
 import { consume } from '@lit/context';
@@ -27,6 +27,10 @@ import {
   tocContext,
 } from '../config.js';
 import { isHeadingBlock, isRootBlock } from '../utils/query.js';
+import {
+  toggle as arrowToggle,
+  toggleCollapsed as arrowToggleCollapsed,
+} from './outline-card.css';
 import * as styles from './outline-preview.css';
 
 function assertType<T>(value: unknown): asserts value is T {
@@ -48,6 +52,19 @@ export class OutlineBlockPreview extends SignalWatcher(
     if (!block.props.text.length) return nothing;
     const iconClass = this.disabledIcon ? styles.iconDisabled : styles.icon;
 
+    const hasArrow = this.toggleVisible;
+    // Every node (arrow or leaf) uses the heading indent class uniformly.
+    // Arrow is rendered by the parent (outline-card.ts) before this span.
+    const indentClass =
+      block.props.type in styles.subtypeStyles
+        ? styles.subtypeStyles[
+            block.props.type as keyof typeof styles.subtypeStyles
+          ]
+        : undefined;
+
+    // 带箭头节点的缩进 = 自身级数；叶子节点的缩进 = 自身级数 + 1 个汉字宽（1.2em）。
+    // 即子节点比父节点多缩进 1 个汉字，且该缩进不包含箭头占位。
+    // 叶子节点（无箭头）的缩进 = 自身级数的 heading 缩进 + 1 个汉字宽（1.2em），
     const previewText = deltas.map(delta => {
       if (delta.attributes?.reference) {
         // If linked doc, render linked doc icon and the doc title.
@@ -89,17 +106,18 @@ export class OutlineBlockPreview extends SignalWatcher(
       }
     });
 
-    const headingClass =
-      block.props.type in styles.subtypeStyles
-        ? styles.subtypeStyles[
-            block.props.type as keyof typeof styles.subtypeStyles
-          ]
-        : '';
-
     return html`<span
         data-testid="outline-block-preview-${block.props.type}"
-        class="${styles.text} ${styles.textGeneral} ${headingClass}"
-        >${previewText}</span
+        class=${classMap({
+          [styles.text]: true,
+          [styles.textGeneral]: !indentClass,
+          [hasArrow
+            ? indentClass
+            : (styles.leafStyles?.[
+                block.props.type as keyof typeof styles.leafStyles
+              ] ?? indentClass)]: true,
+        })}
+        >${this._renderToggle()}${previewText}</span
       >
       ${
         this._context.showIcons$.value
@@ -234,6 +252,36 @@ export class OutlineBlockPreview extends SignalWatcher(
 
   @property({ attribute: false })
   accessor disabledIcon = false;
+
+  @property({ attribute: false })
+  accessor toggleVisible = false;
+
+  @property({ attribute: false })
+  accessor toggleCollapsed = false;
+
+  @property({ attribute: false })
+  accessor toggleTestId = '';
+
+  private _renderToggle() {
+    if (!this.toggleVisible) return nothing;
+    return html`<button
+      class=${classMap({
+        [arrowToggle]: true,
+        [arrowToggleCollapsed]: this.toggleCollapsed,
+      })}
+      data-testid=${this.toggleTestId}
+      @click=${e => e.stopPropagation()}
+      @pointerup=${e => {
+        e.stopPropagation();
+        const ev = new CustomEvent('toggleclick', { detail: e });
+        (e.target as HTMLElement)
+          .closest(AFFINE_OUTLINE_BLOCK_PREVIEW)
+          ?.dispatchEvent(ev);
+      }}
+    >
+      ${ArrowDownSmallIcon({ width: '1em', height: '1em' })}
+    </button>`;
+  }
 
   @consume({ context: tocContext })
   private accessor _context!: TocContext;

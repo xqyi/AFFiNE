@@ -7,7 +7,7 @@ import type { BlockModel } from '@blocksuite/store';
 import { consume, ContextProvider } from '@lit/context';
 import { signal } from '@preact/signals-core';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { html, nothing } from 'lit';
+import { html } from 'lit';
 import { property, query } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
@@ -257,27 +257,17 @@ export class OutlineNoteCard extends SignalWatcher(
           <div class=${styles.cardContent}>
             ${buildOutlineTree(this.note, this._collapsedHeadings).map(row => {
               return html`<div class=${styles.outlineRow}>
-                ${
-                  row.hasChildren
-                    ? html`<button
-                        class=${classMap({
-                          [styles.toggle]: true,
-                          [styles.toggleCollapsed]: row.collapsed,
-                        })}
-                        data-testid=${`outline-toggle-${row.block.id}`}
-                        @click=${(e: MouseEvent) => {
-                          e.stopPropagation();
-                          this._toggleHeading(row);
-                        }}
-                      >
-                        ${ArrowDownSmallIcon({ width: '1em', height: '1em' })}
-                      </button>`
-                    : nothing
-                }
                 <affine-outline-block-preview
                   class=${classMap({
                     active: this.activeHeadingId === row.block.id,
                   })}
+                  .toggleVisible=${row.hasChildren}
+                  .toggleCollapsed=${row.collapsed}
+                  .toggleTestId=${`outline-toggle-${row.block.id}`}
+                  @toggleclick=${(e: MouseEvent) => {
+                    e.stopPropagation();
+                    this._toggleHeading(row);
+                  }}
                   .block=${row.block}
                   .disabledIcon=${invisible}
                   @click=${() => {

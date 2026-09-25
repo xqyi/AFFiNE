@@ -1,4 +1,4 @@
-import path from 'node:path';
+import path, { dirname as _dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -9,10 +9,9 @@ const log = debug('affine:make-env');
 
 const ReleaseTypeSchema = z.enum(['stable', 'beta', 'canary', 'internal']);
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
-const ROOT = path.resolve(__dirname, '..');
+const _scriptsDir = _dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(_scriptsDir, '..', '..', '..', '..', '..');
+const ROOT = path.resolve(_scriptsDir, '..');
 
 const envBuildType = (process.env.BUILD_TYPE || 'canary').trim().toLowerCase();
 const buildType = ReleaseTypeSchema.parse(envBuildType);
