@@ -1,0 +1,318 @@
+# AGENT.md - AFFiNE Electron 编译打包指南
+
+## 环境要求
+
+- **Node.js 22**（必须使用 `C:\node22\node-v22.23.3-win-x64`）
+  - 系统默认 Node 为 v26.7.0，不满足项目 engines 要求 (`>=22.12.0 <23.0.0`)
+  - 所有构建命令必须使用 Node 22 的 node.exe
+- **Yarn 4.18.0**（通过 `.yarn/releases/yarn-4.18.0.cjs` 调用）
+  - 仓库使用 yarn 4 workspaces，yarn 不在系统 PATH 中
+- **Windows PowerShell**
+
+## 路径约定
+
+```
+REPO_ROOT   = E:\AFFiNE\AFFiNE
+ELECTRON_DIR = E:\AFFiNE\AFFiNE\packages\frontend\apps\electron
+NODE22      = C:\node22\node-v22.23.3-win-x64\node.exe
+YARN        = E:\AFFiNE\AFFiNE\.yarn\releases\yarn-4.18.0.cjs
+FORGE_CLI   = E:\AFFiNE\AFFiNE\node_modules\@electron-forge\cli\dist\electron-forge.js
+```
+
+### 4.5. 用 rcedit 把 AFFiNE 图标嵌入到 exe（必须在步骤 5 之前）
+
+手动 `Copy-Item electron.exe` 不会嵌入自定义图标，不补这一步 exe 会显示 Electron 默认图标。项目未直接依赖 `@electron/rcedit`，但 `electron-winstaller` 自带 `vendor/rcedit.exe`：
+
+```powershell
+cd $ELECTRON_DIR
+$exe    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe"
+$ico    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons\icon_canary.ico"
+$rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
+& $rcedit $exe --set-icon $ico   # exitcode=0 成功
+```
+
+验证：嵌入后 exe 大小约 +16KB、mtime 更新（正常现象，`VersionInfo` 仍显示 Electron，rcedit 只改图标资源）；资源管理器里 exe 图标变为 AFFiNE。
+
+### 5. 生成 Squirrel 安装包
+
+## 编译打包步骤（按顺序执行）
+
+### 1. 构建渲染层（Web 前端产物）
+
+```powershell
+cd $ELECTRON_DIR
+& $NODE22 $YARN workspace @affine/electron-renderer build
+```
+
+产物落在 `packages/frontend/apps/electron-renderer/dist`。
+
+### 2. 同步 Web 产物到 Electron resources
+
+```powershell
+$src = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron-renderer\dist"
+$dst = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\web-static"
+robocopy $src $dst /MIR /NFL /NDL /NJH /NJS
+```
+
+> 使用 `robocopy /MIR` 而非 `Remove-Item`（后者被系统策略拦截）。
+
+### 3. 构建 Electron 主进程
+
+```powershell
+cd $ELECTRON_DIR
+& $NODE22 --import tsx ./scripts/build-layers.ts
+```
+
+产物落在 `packages/frontend/apps/electron/dist/main.js`。
+
+### 4. 手动构造 forge 打包目录
+
+Windows 上 forge `package` 会因 `node_modules` 软链接问题失败（`ENOENT: stat '...\resources\app\node_modules'`），需要手动构造：
+
+```powershell
+cd $ELECTRON_DIR
+$appDir = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64"
+$resourcesApp = "$appDir\resources\app"
+$electronDist = "E:\AFFiNE\AFFiNE\node_modules\electron\dist"
+
+# 创建目录结构
+New-Item -ItemType Directory -Path $resourcesApp -Force | Out-Null
+
+# 复制 main.js 到 resources/app
+Copy-Item "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\dist\main.js" "$resourcesApp\main.js" -Force
+
+# 复制 electron 的 package.json 到 resources/app
+Copy-Item "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\package.json" "$resourcesApp\package.json" -Force
+
+# 复制 web-static 到 resources/app
+robocopy "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\web-static" "$resourcesApp\resources\web-static" /MIR /NFL /NDL /NJH /NJS
+
+# 复制 electron 可执行文件
+Copy-Item "$electronDist\electron.exe" "$appDir\AFFiNE-canary.exe" -Force
+
+# 复制 locales
+robocopy "$electronDist\locales" "$appDir\locales" /MIR /NFL /NDL /NJH /NJS
+
+# 复制必要 dll 和 dat
+foreach ($f in @("icudtl.dat","d3dcompiler_47.dll","ffmpeg.dll","libEGL.dll","libGLESv2.dll")) {
+    if (Test-Path "$electronDist\$f") { Copy-Item "$electronDist\$f" "$appDir\$f" -Force }
+}
+
+# 复制 LICENSE
+Copy-Item "E:\AFFiNE\AFFiNE\LICENSE" "$appDir\LICENSE" -Force
+```
+
+### 5. 生成 Squirrel 安装包
+
+`make-squirrel.ts` 默认会生成 delta 包，但 delta 需要旧 full nupkg 作为基线。如果没有基线包，用 `noDelta: true` 跳过：
+
+```powershell
+cd $ELECTRON_DIR
+& $NODE22 --import tsx -e '
+import { createWindowsInstaller } from "electron-winstaller";
+import fs from "fs-extra";
+import path from "node:path";
+
+const ROOT = process.cwd();
+const appDirectory = path.resolve(ROOT, "out/canary/AFFiNE-canary-win32-x64");
+const outPath = path.resolve(ROOT, "out/canary/make/squirrel.windows/x64");
+const pkg = await fs.readJson(path.resolve(ROOT, "package.json"));
+const appName = "AFFiNE-canary";
+
+await fs.ensureDir(outPath);
+await createWindowsInstaller({
+  name: appName,
+  title: appName,
+  noMsi: true,
+  noDelta: true,
+  exe: `${appName}.exe`,
+  setupExe: `${appName}-${pkg.version} Setup.exe`,
+  version: pkg.version,
+  appDirectory,
+  outputDirectory: outPath,
+  iconUrl: "https://cdn.affine.pro/app-icons/icon_canary.ico",
+  setupIcon: path.resolve(ROOT, "resources/icons/icon_canary.ico"),
+  loadingGif: path.resolve(ROOT, "resources/icons/affine_installing.gif"),
+});
+
+const setup = path.resolve(outPath, `${appName}-${pkg.version} Setup.exe`);
+const fi = fs.statSync(setup);
+console.log(`Done! Setup.exe: ${fi.size} bytes, ${fi.mtime}`);
+'
+```
+
+或直接跑 `make-squirrel.ts`（有基线包时 delta 生成正常）：
+
+```powershell
+cd $ELECTRON_DIR
+& $NODE22 --import tsx ./scripts/make-squirrel.ts
+```
+
+## 关键注意事项
+
+| 项                 | 说明                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| Node 版本          | 必须用 Node 22（`C:\node22\node-v22.23.3-win-x64\node.exe`），系统 Node 26 不满足 engines 约束    |
+| Yarn 调用          | 直接用 `node .yarn/releases/yarn-4.18.0.cjs`，yarn 不在 PATH                                      |
+| forge CLI          | 根目录 `node_modules/@electron-forge/cli/dist/electron-forge.js`，workspace node_modules 里找不到 |
+| forge 依赖 yarn    | forge 内部 spawn `yarn` 命令，需要创建 `yarn.cmd` shim 并加入 PATH                                |
+| forge package 失败 | Windows 上 forge 的 electron-packager 因 `node_modules` 软链接报 ENOENT，需手动构造打包目录       |
+| make-squirrel 依赖 | 需要 `out/canary/AFFiNE-canary-win32-x64` 完整目录（含 exe、dll、locales、resources/app）         |
+| delta 包           | 无基线 full nupkg 时 delta 生成失败，需 `noDelta: true` 跳过                                      |
+| 构建耗时           | 全量 10-30 分钟                                                                                   |
+| 输出目录           | `out/canary/make/squirrel.windows/x64/AFFiNE-canary-0.27.5 Setup.exe` 为最终安装包                |
+
+## 验证清单
+
+打包完成后检查：
+
+1. `dist/main.js` 时间戳为最新
+2. `out/canary/AFFiNE-canary-win32-x64/resources/app/main.js` 存在且为新构建
+3. `AFFiNE-canary-0.27.5 Setup.exe` 时间戳更新
+4. 运行 Setup.exe 安装后验证大纲三处修复：
+   - 叶子标题（如"服务器清单"）无前置箭头
+   - H4 相对 H3 缩进多 1 汉字（缩进比 H3 大而非小）
+   - hover 大纲节点只有文字变亮，无底色高亮
+
+## 常见打包坑（踩坑记录）
+
+### 坑 1：修改了 outline 代码但 Setup.exe 没效果
+
+**现象：** 修改了 blocksuite/affine/fragments/outline/ 下的代码，重新打包后安装运行，界面没有任何变化。
+
+**根因：** 大纲 UI 代码在 renderer（web 前端）里，不是 Electron 主进程。只跑 build-layers.ts（主进程）不会更新 outline 代码，必须重新 bundle renderer。
+
+**正确流程：**
+
+1. 重新 bundle renderer（修改 outline 代码后必做）：
+   cd E:\AFFiNE\AFFiNE\packages\frontend\apps\electron-renderer
+   & C:\node22\node-v22.23.3-win-x64\node.exe E:\AFFiNE\AFFiNE\node_modules\@affine-tools\cli\bin\runner.js affine.ts bundle -p electron-renderer
+2. 同步 renderer dist 到 electron resources：
+   robocopy E:\AFFiNE\AFFiNE\packages\frontend\apps\electron-renderer\dist E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\web-static /MIR /NFL /NDL /NJH /NJS
+3. 重新构造打包目录 + 生成 Setup.exe（同步骤 4/5）
+
+**验证方法：** 打包前检查 web-static 里文件的时间戳是否为最新构建：
+
+```powershell
+Get-ChildItem E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\web-static -Recurse -File | Sort LastWriteTime -Descending | Select -First 3 Name,LastWriteTime
+```
+
+如果时间戳早于代码修改时间，说明 renderer 没有重新构建。
+
+### 坑 2：forge package 在 Windows 上静默失败
+
+**现象：** electron-forge package 日志显示 Finalizing package 成功，但 out/canary/AFFiNE-canary-win32-x64 目录没有生成。
+
+**根因：** forge 内部调用 electron-packager 复制 node_modules，Windows 上软链接/符号链接导致 ENOENT: no such file or directory, stat ...\resources\app\node_modules，但错误被吞掉。
+
+**归因澄清（重要，别搞混）：**
+
+- 这个 ENOENT 是 **Windows 文件系统特性**导致的，**与 Node.js 版本无关**。Yarn 4 用 `nodeLinker: node-modules` + `nmMode: hardlinks-local`，monorepo 依赖靠 junction（目录符号链接）连接；Windows 上 electron-packager 在 Finalizing 阶段 `stat` 临时目录里尚未落地的 `resources\app\node_modules` 链接目标就报 ENOENT。换 Node 22 还是 Node 26 都会挂。
+- 与它正交的另一条线才是 Node 版本问题：仓库 `engines` 约束 `>=22.12.0 <23.0.0`，系统默认 v26 不满足，导致 `build-layers.ts` / rspack / tsx 构建脚本在 v26 下报错，必须用 Node 22。
+- 即：forge 失败 = Windows 软链接问题（非 Node 版本）；必须 Node 22 = 构建脚本 engines 约束。两件事别混为一谈。
+
+**绕过方法：** 不用 forge package，手动构造打包目录（见步骤 4），然后直接跑 make-squirrel。
+
+### 坑 3：make-squirrel delta 包报错
+
+**现象：** make-squirrel.ts 运行后，AFFiNE-canary-0.27.5 Setup.exe 没有更新（时间戳是旧的），日志报 DeltaPackageBuilder.CreateDeltaPackage 错误。
+
+**根因：** Squirrel 生成 delta nupkg 需要旧的 full nupkg 作为基线。如果没有基线包（比如 .tmp-full.nupkg 被删了），delta 生成失败，createWindowsInstaller 抛异常，Setup.exe 不会重新生成。
+
+**绕过方法：** 用 noDelta: true 跳过 delta 生成：
+
+```javascript
+await createWindowsInstaller({
+  noMsi: true,
+  noDelta: true,  // 关键：跳过 delta 包
+  ...
+});
+```
+
+### 坑 4：安装后运行的是 %LOCALAPPDATA%\\apps 目录，不是 System32
+
+**现象：** 安装后运行 AFFiNE，界面没有最新修改。
+
+**根因：** Squirrel 安装器把应用装到 %LOCALAPPDATA%\apps\AFFiNE-canary\ 目录，System32 下的 exe 只是快捷 shim。实际运行的是 LOCALAPPDATA 里的版本。
+
+**验证方法：**
+
+```powershell
+Get-Item "$env:LOCALAPPDATA\apps\AFFiNE-canary\AFFiNE-canary.exe" | Select Name,LastWriteTime
+```
+
+### 坑 5：yarn 不在 PATH
+
+**现象：** electron-forge package 报 spawn yarn ENOENT。
+
+**根因：** 仓库用 yarn 4 workspaces，但系统 PATH 里没有 yarn。
+
+**绕过方法：** 创建 yarn.cmd shim 并加入 PATH：
+
+```powershell
+$tmpBin = "E:\AFFiNE\AFFiNE\.tmp-bin"
+New-Item -ItemType Directory -Path $tmpBin -Force | Out-Null
+$cmdContent = "@echo off`r`nC:\node22\node-v22.23.3-win-x64\node.exe `"E:\AFFiNE\AFFiNE\.yarn\releases\yarn-4.18.0.cjs`" %*"
+[System.IO.File]::WriteAllText("$tmpBin\yarn.cmd", $cmdContent)
+$env:PATH = "$tmpBin;" + $env:PATH
+```
+
+### 坑 6：outline 缩进 CSS 的级联问题
+
+**现象：** 修改了 subtypeStyles 的 paddingLeft，但实际渲染的缩进和预期不符。
+
+**根因：** outline-preview.css.ts 里 textGeneral 和 subtypeStyles 都设置了 paddingLeft，vanilla-extract 生成的 CSS 类顺序决定了谁覆盖谁。如果 textGeneral 在 CSS 文件里定义在 subtypeStyles 之后，textGeneral 的 paddingLeft 会覆盖 heading 的。
+
+**当前设计（2026-09-25 定稿）：**
+
+- textGeneral 不再设 paddingLeft（已删除）
+- 带箭头节点：paddingLeft = 级数 × 1.2em，箭头在行首（0 偏移），文字在 paddingLeft 处
+  - H1 箭头节点：文字 1.2em；H2 箭头节点：文字 2.4em；H3 箭头节点：文字 3.6em；H4 箭头节点：文字 4.8em
+- 叶子节点：无箭头，paddingLeft = (级数+1) × 1.2em，即文字位置 = 父级箭头节点文字位置 + 1.2em
+  - 例：H5 叶子（新增节点）：新 字 6.0em = H4 箭头节点测 字位置（4.8em）+ 1.2em
+- 效果：H1 紧贴左侧（0 偏移），每级相对父级缩进 1 个汉字宽度（1.2em）
+- 踩过的坑：叶子节点 paddingLeft 曾误设为 级数×1.2em（和箭头节点相同），导致叶子比父级还少缩进
+
+**关键文件：**
+
+- blocksuite/affine/fragments/outline/src/card/outline-preview.css.ts — subtypeStyles 的 paddingLeft 值
+- blocksuite/affine/fragments/outline/src/card/outline-preview.ts — 箭头按钮渲染逻辑（_renderToggle）
+- blocksuite/affine/fragments/outline/src/card/outline-card.css.ts — toggle 按钮宽度（1.2em）
+
+### 坑 7：exe 图标需 rcedit 手动嵌入，否则显示 Electron 默认图标
+
+**现象：** 手动打包出的 `AFFiNE-canary.exe` 在资源管理器/任务栏里显示的是 Electron 官方图标（GitHub），不是 AFFiNE。
+
+**根因：** Windows 的 exe 图标内嵌在 PE 资源段。官方 `forge make` 经 electron-packager（底层用 `@electron/rcedit`）把 `packagerConfig.icon`（`resources/icons/icon_canary.ico`）编译进 exe；我们绕开 forge 手动 `Copy-Item electron.exe` 时跳过了这步，exe 沿用 Electron 自带图标。验证：手动打包的 exe 与 `node_modules/electron/dist/electron.exe` 大小、时间戳一致，且 `VersionInfo` 显示 `ProductName=Electron`、`InternalName=electron.exe`。
+
+**修复：在步骤 5 生成 Squirrel 安装包之前，用 rcedit 把 ico 嵌入到已打包的 exe**
+
+```powershell
+# 项目未直接依赖 @electron/rcedit，但 electron-winstaller 自带 rcedit.exe
+$exe    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe"
+$ico    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons\icon_canary.ico"
+$rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
+& $rcedit $exe --set-icon $ico   # exitcode=0 即成功
+```
+
+**验证：** rcedit 成功后 exe 大小会增大（约 +16KB），mtime 更新；但 `VersionInfo`（CompanyName/FileDescription）仍显示 Electron——这是正常的，rcedit 只改图标资源，不改 version info。真正生效的是 exe 的内嵌图标资源，资源管理器会显示 AFFiNE。务必在 `createWindowsInstaller` 之前完成嵌入，否则 Setup.exe 里的 exe 仍是 Electron 图标。
+
+## 构建/打包注意事项（务必遵守，踩过坑）
+
+### 必须用 Node 22 编译
+
+- 本机默认 node 是 v26，会直接让 `build-layers.ts` / tsx 报错，**不要用默认 node**
+- 所有构建/打包/测试命令一律走 Node 22 绝对路径：`& "C:\node22\node-v22.23.3-win-x64\node.exe"`，并先确认 `$PSVersionTable`/`node --version` 是 22
+- 例：`& "C:\node22\node-v22.23.3-win-x64\node.exe" "E:\AFFiNE\AFFiNE\node_modules\vitest\vitest.mjs" run --config "<相对/绝对路径>"`
+
+### lint-staged / husky 会扫到未跟踪的生成文件，提交前必须排除
+
+- 仓库根存在大量未跟踪的构建 scratch（`.cmake/`、`.tmp-*.log`、`.tmp-bin/`、`packages/frontend/apps/electron/.tmp-*.log`、`scripts/make-env.js`、`scripts/make-nsis.mjs` 等）
+- husky pre-commit 会跑 oxfmt+oxlint，一旦这些未跟踪生成文件被 lint 规则命中，提交就会失败并自动 `git stash` 回滚，反复失败很难排查
+- 做法：把上述路径写入 `.git/info/exclude`（本地排除，不提交、不影响仓库 `.gitignore`），再 `git add` 目标文件提交
+- `AGENT.md` 本身是 gitignored，不要强制 `git add`
+
+### Electron 打包命令
+
+- 打包入口：`packages/frontend/apps/electron`
+- 用 Node 22 绝对路径运行 forge/make 相关脚本，产物（`Setup.exe` 等）落在该目录 build 输出里
