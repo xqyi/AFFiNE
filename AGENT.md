@@ -21,14 +21,50 @@ FORGE_CLI   = E:\AFFiNE\AFFiNE\node_modules\@electron-forge\cli\dist\electron-fo
 
 ### 4.5. 用 rcedit 把 AFFiNE 图标嵌入到 exe（必须在步骤 5 之前）
 
-手动 `Copy-Item electron.exe` 不会嵌入自定义图标，不补这一步 exe 会显示 Electron 默认图标。项目未直接依赖 `@electron/rcedit`，但 `electron-winstaller` 自带 `vendor/rcedit.exe`：
+手动 `Copy-Item electron.exe` 不会嵌入自定义图标，不补这一步 exe 会显示 Electron 默认图标。
+
+**重要：** 项目里 `node_modules/electron-winstaller/vendor/rcedit.exe` 是**精简版**，只认 `--set-icon`，**不支持**改版本元数据。要改 `ProductName`/`CompanyName` 等（Squirrel 生成快捷方式名/图标时读它），必须用**完整版 rcedit v2.0.0**（`rcedit` npm 包，带 `--set-version-string`）。完整版已下载到 `node_modules/electron-winstaller/vendor/rcedit-full/package/bin/rcedit-x64.exe`。
+
+为什么必须改元数据：Squirrel 在每台机器安装时，从主程序 exe 的 `ProductName`/`CompanyName` 决定快捷方式显示名与文件夹。若 `ProductName=Electron`、`CompanyName=GitHub, Inc.`，装完开始菜单就会是 `GitHub, Inc.\Electron.lnk`、任务栏 Electron 图标——**换任何机器都复现**。把主程序 exe（`out/canary/.../AFFiNE-canary.exe`，会被塞进 nupkg）的图标和元数据都改对，分发后任意机器装完即正确。
+
+```powershell
+cd $ELECTRON_DIR
+$exe    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe"
+$ico    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons\icon_canary.ico"
+$rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit-full\package\bin\rcedit-x64.exe"   # 完整版
+
+# 1) 嵌图标（完整版 rcedit 用 --set-icon）
+& $rcedit $exe --set-icon $ico
+# 2) 改 PE 版本信息字符串（Squirrel 快捷方式名/图标依赖这些）
+& $rcedit $exe --set-version-string "CompanyName" "AFFiNE"
+& $rcedit $exe --set-version-string "FileDescription" "AFFiNE-canary"
+& $rcedit $exe --set-version-string "InternalName" "AFFiNE-canary"
+& $rcedit $exe --set-version-string "ProductName" "AFFiNE-canary"
+# 稳定版把上面四个值改成 "AFFiNE"（图标用 icon.ico）。
+```
+
+**若本机还没有完整版 rcedit**（`rcedit-full/` 不存在），先下载 `rcedit@5.0.2` 的 tarball 解包：
+
+```powershell
+& $NODE22 -e "(async()=>{const r=await fetch('https://registry.npmjs.org/rcedit/-/rcedit-5.0.2.tgz');const b=Buffer.from(await r.arrayBuffer());require('fs').writeFileSync('E:/AFFiNE/AFFiNE/node_modules/electron-winstaller/vendor/rcedit-full/rcedit-5.0.2.tgz',b)})()"
+tar -xzf node_modules/electron-winstaller/vendor/rcedit-full/rcedit-5.0.2.tgz -C node_modules/electron-winstaller/vendor/rcedit-full
+# 产物在 node_modules/electron-winstaller/vendor/rcedit-full/package/bin/rcedit-x64.exe
+```
+
+注意：`rcedit` 完整版与精简版共存时，步骤 4.5 一律用 `rcedit-full` 那个；`vendor/rcedit.exe`（精简版）仅 `--set-icon` 够用，不能改元数据。
 
 ```powershell
 cd $ELECTRON_DIR
 $exe    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe"
 $ico    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons\icon_canary.ico"
 $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
-& $rcedit $exe --set-icon $ico   # exitcode=0 成功
+# 不只嵌图标，还要把 PE 元数据改成 AFFiNE。Squirrel 生成快捷方式/根 shim 时
+# 读主程序 exe 的 ProductName/CompanyName 来决定显示名——不改的话，每台机器
+# 装完开始菜单都会叫 “GitHub, Inc.\Electron.lnk”，任务栏也是 Electron 图标。
+& $rcedit $exe --set-icon $ico --set-product-name "AFFiNE-canary" --set-file-description "AFFiNE-canary" --set-internal-name "AFFiNE-canary" --set-company-name "AFFiNE"   # exitcode=0 成功
+# 稳定版把上面四个 --set-* 值改成 "AFFiNE" 即可（图标用 icon.ico）。
+# 注意：改的是 out/canary/.../AFFiNE-canary.exe（会被塞进 nupkg 的主程序 exe），
+# 这样 Squirrel 在每台机器上安装时会据此生成正确的快捷方式名与图标。
 ```
 
 验证：嵌入后 exe 大小约 +16KB、mtime 更新（正常现象，`VersionInfo` 仍显示 Electron，rcedit 只改图标资源）；资源管理器里 exe 图标变为 AFFiNE。
@@ -300,7 +336,12 @@ $env:PATH = "$tmpBin;" + $env:PATH
 $exe    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe"
 $ico    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons\icon_canary.ico"
 $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
-& $rcedit $exe --set-icon $ico   # exitcode=0 即成功
+# 用完整版 rcedit（见步骤 4.5，rcedit-full/package/bin/rcedit-x64.exe）
+& $rcedit $exe --set-icon $ico
+& $rcedit $exe --set-version-string "CompanyName" "AFFiNE"
+& $rcedit $exe --set-version-string "FileDescription" "AFFiNE-canary"
+& $rcedit $exe --set-version-string "InternalName" "AFFiNE-canary"
+& $rcedit $exe --set-version-string "ProductName" "AFFiNE-canary"
 ```
 
 **验证：** rcedit 成功后 exe 大小会增大（约 +16KB），mtime 更新；但 `VersionInfo`（CompanyName/FileDescription）仍显示 Electron——这是正常的，rcedit 只改图标资源，不改 version info。真正生效的是 exe 的内嵌图标资源，资源管理器会显示 AFFiNE。务必在 `createWindowsInstaller` 之前完成嵌入，否则 Setup.exe 里的 exe 仍是 Electron 图标。
