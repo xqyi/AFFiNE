@@ -227,10 +227,10 @@ export const RootAppSidebar = memo((): ReactElement => {
       </SidebarContainer>
       <SidebarScrollableContainer>
         <NavigationPanelFavorites />
-        <NavigationPanelOrganize />
-        <NavigationPanelMigrationFavorites />
-        <NavigationPanelTags />
         <NavigationPanelCollections />
+        <NavigationPanelOrganize />
+        <NavigationPanelTags />
+        <NavigationPanelMigrationFavorites />
         <CollapsibleSection
           path={['others']}
           title={t['com.affine.rootAppSidebar.others']()}

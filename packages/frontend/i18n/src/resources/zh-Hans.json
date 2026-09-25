@@ -1186,7 +1186,7 @@
   "com.affine.quicksearch.group.searchfor-locally": "搜索 \"{{query}}\" （本地）",
   "com.affine.resetSyncStatus.button": "重置同步",
   "com.affine.resetSyncStatus.description": "此操作可能会修复一些同步问题。",
-  "com.affine.rootAppSidebar.collections": "精选",
+  "com.affine.rootAppSidebar.collections": "动态",
   "com.affine.rootAppSidebar.notifications": "提醒",
   "com.affine.rootAppSidebar.doc.link-doc-only": "此处只能放置文档",
   "com.affine.rootAppSidebar.docs.no-subdoc": "没有链接文档",
