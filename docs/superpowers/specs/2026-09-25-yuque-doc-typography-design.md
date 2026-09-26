@@ -19,15 +19,15 @@
 字体变量来自 `@toeverything/theme` 的 `baseTheme`，以 `--affine-*` 形式落到 DOM。
 消费方全部读变量、不读常量，因此改默认值即可让下游自动生效。
 
-| 变量 | 现值 | 消费方 |
-|---|---|---|
-| `--affine-font-h-1`…`-h-6` | 28/26/24/22/20/18px | `paragraph/src/styles.ts` 的 `.h1`–`.h6` |
-| `--affine-font-base` | 15px | `page-root-block` / `surface-block`、正文基准 |
-| `--affine-font-sm` / `-xs` | 14/12px | 代码块、附件、嵌入块等 |
-| `--affine-font-family` | `'Inter','Source Sans 3',Poppins, …sans-serif, emoji`（**无 CJK 回退**） | `page-root-block`、`surface-block`、`page-editor` 等 |
-| `--affine-font-code-family` | `'IBM Plex Mono','Space Mono',Consolas,Menlo,Monaco,Courier,monospace,…` | 代码块 `code/src/styles.ts`、行内 code |
-| `--affine-line-height` | `calc(1em + 8px)` | 正文、代码块、列表 |
-| 文档标题 | 硬编码 `40px / 50px / 700`（`doc-title/src/doc-title.ts`，**非变量**） | 文档顶部大标题 |
+| 变量                        | 现值                                                                     | 消费方                                               |
+| --------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `--affine-font-h-1`…`-h-6`  | 28/26/24/22/20/18px                                                      | `paragraph/src/styles.ts` 的 `.h1`–`.h6`             |
+| `--affine-font-base`        | 15px                                                                     | `page-root-block` / `surface-block`、正文基准        |
+| `--affine-font-sm` / `-xs`  | 14/12px                                                                  | 代码块、附件、嵌入块等                               |
+| `--affine-font-family`      | `'Inter','Source Sans 3',Poppins, …sans-serif, emoji`（**无 CJK 回退**） | `page-root-block`、`surface-block`、`page-editor` 等 |
+| `--affine-font-code-family` | `'IBM Plex Mono','Space Mono',Consolas,Menlo,Monaco,Courier,monospace,…` | 代码块 `code/src/styles.ts`、行内 code               |
+| `--affine-line-height`      | `calc(1em + 8px)`                                                        | 正文、代码块、列表                                   |
+| 文档标题                    | 硬编码 `40px / 50px / 700`（`doc-title/src/doc-title.ts`，**非变量**）   | 文档顶部大标题                                       |
 
 ### 与语雀观感的核心差距
 
@@ -41,9 +41,9 @@
 
 1. **作用范围 = 仅文档视图**：page/edgeless 编辑器内的标题、正文、代码块、
    文档标题，以及 markdown/HTML 导入、导出、打印的字体表现。**不改 app 外壳 UI。**
- 2. **字体族策略 = 保留 Inter/Source 系 + 补齐 CJK 回退链**（平台优先级：
-    macOS 苹方 → 日文/韩文 → Windows 微软雅黑 → Noto Sans CJK，
-    即 PingFang SC → Hiragino Sans GB → Microsoft YaHei → Noto Sans CJK SC。）
+2. **字体族策略 = 保留 Inter/Source 系 + 补齐 CJK 回退链**（平台优先级：
+   macOS 苹方 → 日文/韩文 → Windows 微软雅黑 → Noto Sans CJK，
+   即 PingFang SC → Hiragino Sans GB → Microsoft YaHei → Noto Sans CJK SC。）
 3. **字号阶梯 = 对齐语雀收窄节奏**（见下方清单），行高略放宽。
 4. **文档标题变量化**：新增 `--affine-font-title`，替换 `doc-title` 的硬编码 40px。
 5. **行内 code 字号本期不动**（保持 `calc(base ∓ Npx)` 相对计算，避免连锁改动）。
@@ -57,18 +57,15 @@
 ```css
 /* 字体族：西文保留 Inter/Source 系，中文补 CJK 回退链（关键改动） */
 --affine-font-family:
-  'Inter', 'Source Sans 3',
-  'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
-  'Noto Sans CJK SC', 'Noto Sans',
-  apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif,
+  'Inter', 'Source Sans 3', 'PingFang SC', 'Hiragino Sans GB',
+  'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans', apple-system,
+  BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif,
   'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
 /* 等宽字体：保留 Source Code Pro / IBM Plex / Space Mono，补 CJK 等宽回退 */
 --affine-font-code-family:
-  'Source Code Pro', 'IBM Plex Mono', 'Space Mono',
-  Consolas, Menlo, Monaco,
-  'Noto Sans Mono CJK SC', 'Noto Sans Mono',
-  'Courier New', monospace;
+  'Source Code Pro', 'IBM Plex Mono', 'Space Mono', Consolas, Menlo, Monaco,
+  'Noto Sans Mono CJK SC', 'Noto Sans Mono', 'Courier New', monospace;
 
 /* 字号阶梯：对齐语雀收窄节奏（原 28/26/24/22/20/18） */
 --affine-font-h-1: 30px;
@@ -128,11 +125,11 @@
 
 ## 文件级改动清单
 
-| 文件 | 改动 |
-|---|---|
-| `packages/frontend/component/src/theme/typography.css`（新建） | `:root` 写入清单里全部变量默认值 |
-| `packages/frontend/component/src/theme/theme.css.ts` | 顶部 `import './typography.css'` |
-| `blocksuite/affine/fragments/doc-title/src/doc-title.ts` | `.doc-title-container` 的 font-size/line-height 改读新变量 |
+| 文件                                                           | 改动                                                       |
+| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `packages/frontend/component/src/theme/typography.css`（新建） | `:root` 写入清单里全部变量默认值                           |
+| `packages/frontend/component/src/theme/theme.css.ts`           | 顶部 `import './typography.css'`                           |
+| `blocksuite/affine/fragments/doc-title/src/doc-title.ts`       | `.doc-title-container` 的 font-size/line-height 改读新变量 |
 
 ## 测试要点
 

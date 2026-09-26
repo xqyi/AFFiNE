@@ -45,10 +45,12 @@
 ### Task 1: 新建 typography.css 覆盖层并接入主题
 
 **Files:**
+
 - Create: `packages/frontend/component/src/theme/typography.css`
 - Modify: `packages/frontend/component/src/theme/theme.css.ts:1`（加 import）
 
 **Interfaces:**
+
 - Consumes: 无（首个任务）。
 - Produces: `:root` 上 10 个变量默认值（上方"变量清单"）。后续 Task 依赖这些变量已在全局生效。
 
@@ -73,8 +75,7 @@
     'Inter', 'Source Sans 3', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans', apple-system,
     BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif,
-    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-    'Noto Color Emoji';
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
   --affine-font-code-family:
     'Source Code Pro', 'IBM Plex Mono', 'Space Mono', Consolas, Menlo, Monaco,
@@ -125,19 +126,23 @@ globalStyle('body', {
 - [ ] **Step 3: 静态验证 CSS 语法**
 
 Run:
+
 ```powershell
 cd E:\AFFiNE\AFFiNE
 npx eslint packages/frontend/component/src/theme/typography.css packages/frontend/component/src/theme/theme.css.ts
 ```
+
 Expected: 0 error（若该目录未纳入 eslint 范围则报 "file ignored"，属正常，以下一步构建为准）。
 
 - [ ] **Step 4: 构建 @affine/component 确认 CSS 被打包**
 
 Run:
+
 ```powershell
 cd E:\AFFiNE\AFFiNE
-yarn affine build component 2>&1 | Select-String -Pattern "error|typography|failed" 
+yarn affine build component 2>&1 | Select-String -Pattern "error|typography|failed"
 ```
+
 Expected: 无 `error`/`failed`；若构建脚本名不同（`yarn --cwd packages/frontend/component build` 无 build script），改用 `yarn affine bundle --package @affine/component` 或直接跳到 Task 2 的 dev server 验证（变量层是否注入由浏览器实测决定，构建通过即可）。
 
 - [ ] **Step 5: Commit**
@@ -153,9 +158,11 @@ git commit -m "feat(theme): add yuque-style typography override layer (:root fon
 ### Task 2: 文档标题变量化
 
 **Files:**
+
 - Modify: `blocksuite/affine/fragments/doc-title/src/doc-title.ts:21-25`（`.doc-title-container` 的 font-size/line-height）
 
 **Interfaces:**
+
 - Consumes: Task 1 提供的 `--affine-font-title` / `--affine-font-title-line-height`（带 fallback，Task 1 缺省时也能独立工作）。
 - Produces: 文档标题尺寸跟随变量。
 
@@ -186,10 +193,12 @@ git commit -m "feat(theme): add yuque-style typography override layer (:root fon
 - [ ] **Step 2: 类型检查 blocksuite fragment**
 
 Run:
+
 ```powershell
 cd E:\AFFiNE\AFFiNE\blocksuite
 yarn tsc -b --force 2>&1 | Select-String -Pattern "error TS" | Select-Object -First 10
 ```
+
 Expected: 无 `error TS`（纯 CSS 字符串改动，正常应零报错）。
 
 - [ ] **Step 3: Commit**
@@ -207,39 +216,46 @@ git commit -m "refactor(doc-title): drive title size/line-height from --affine-f
 **Files:** 无改动，仅验证。
 
 **Interfaces:**
+
 - Consumes: Task 1 + Task 2。
 
 - [ ] **Step 1: 启动 web dev server**
 
 Run:
+
 ```powershell
 cd E:\AFFiNE\AFFiNE
 yarn affine dev web
 ```
+
 Expected: dev server 起在 `http://localhost:8080`（rspack dev server 默认端口；如端口被占用会提示其他端口，以终端输出为准）。
 
 - [ ] **Step 2: 建一篇测试文档，逐项核对**
 
 在应用里新建文档，依次输入：`# H1 标题`、`## H2 小节`、`### H3`、`#### H4`、`##### H5`、`###### H6`、一段中文正文（≥5 行）、一个含 `apt install <pkg>` 的行内 code、一个 `bash` 代码块、文档标题写"Ubuntu 运维手册"。用浏览器 DevTools 核对：
 
-| 检查项 | 期望 |
-|---|---|
-| `getComputedStyle(document).getPropertyValue('--affine-font-h-1')` | `30px` |
-| `--affine-font-h-6` | `15px` |
-| `--affine-line-height` | `calc(1em + 10px)` 或计算值 ≥ 25px |
-| 正文 `font-family` 计算值 | 以 `Inter`（或已装 CJK 字体）开头，**含** `PingFang SC`/`Microsoft YaHei`（按平台） |
-| 代码块 `font-family` | 以 `Source Code Pro` 或 `IBM Plex Mono` 开头 |
-| 文档标题高度观感 | 30px/40px，与 H1 协调、不再 40px 割裂 |
-| 中文渲染 | 苹方/微软雅黑（系统字体），非生硬默认 sans-serif |
+| 检查项                                                             | 期望                                                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `getComputedStyle(document).getPropertyValue('--affine-font-h-1')` | `30px`                                                                              |
+| `--affine-font-h-6`                                                | `15px`                                                                              |
+| `--affine-line-height`                                             | `calc(1em + 10px)` 或计算值 ≥ 25px                                                  |
+| 正文 `font-family` 计算值                                          | 以 `Inter`（或已装 CJK 字体）开头，**含** `PingFang SC`/`Microsoft YaHei`（按平台） |
+| 代码块 `font-family`                                               | 以 `Source Code Pro` 或 `IBM Plex Mono` 开头                                        |
+| 文档标题高度观感                                                   | 30px/40px，与 H1 协调、不再 40px 割裂                                               |
+| 中文渲染                                                           | 苹方/微软雅黑（系统字体），非生硬默认 sans-serif                                    |
 
 Run（在 DevTools Console 内）：
+
 ```js
 const cs = getComputedStyle(document.documentElement);
-[cs.getPropertyValue('--affine-font-h-1'),
- cs.getPropertyValue('--affine-font-h-6'),
- cs.getPropertyValue('--affine-line-height'),
- cs.getPropertyValue('--affine-font-title')].map(s => s.trim());
+[
+  cs.getPropertyValue('--affine-font-h-1'),
+  cs.getPropertyValue('--affine-font-h-6'),
+  cs.getPropertyValue('--affine-line-height'),
+  cs.getPropertyValue('--affine-font-title'),
+].map(s => s.trim());
 ```
+
 Expected: `['30px','15px','calc(1em + 10px)','30px']`。
 
 - [ ] **Step 3: 主题切换 + 设置覆盖回归**
