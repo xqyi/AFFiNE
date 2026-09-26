@@ -31,7 +31,6 @@ export class AffineCodeUnit extends ShadowlessElement {
     if (this.delta.attributes?.code) {
       style = {
         ...style,
-        'font-size': 'calc(var(--affine-font-base) - 3px)',
         padding: '0px 4px 2px',
       };
     }
