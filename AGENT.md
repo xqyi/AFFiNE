@@ -69,7 +69,18 @@ $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
 
 验证：嵌入后 exe 大小约 +16KB、mtime 更新（正常现象，`VersionInfo` 仍显示 Electron，rcedit 只改图标资源）；资源管理器里 exe 图标变为 AFFiNE。
 
+或手动验证：解包 full nupkg，对 `lib/net45/AFFiNE-canary_ExecutionStub.exe` 按 ico 头解析出每张图的 offset/size，取前 16 字节逐张 `indexOf`（rcedit 把 ico 拆成多张 RT_ICON 资源嵌入，搜完整 ico 文件或 ico 头 8 字节都会漏判）。
+
 ### 5. 生成 Squirrel 安装包
+
+本机直接跑 `make-squirrel.ts` 会在 delta 阶段失败（**坑 3**：`The base package release does not exist`，因为 out 目录里没有旧版 full nupkg 基线，`remoteReleases` 也没有配）。此时改用 `noDelta: true` 的等价调用（步骤 5 的 `--import tsx -e` 内联脚本），**并手动补跑一次 fix-squirrel-stub-icon**（内联脚本绕过了 `make-squirrel.ts` 的自动 hook）：
+
+```powershell
+cd $ELECTRON_DIR
+& $NODE22 --import tsx -e 'import("./scripts/fix-squirrel-stub-icon.ts").then(m => m.fixSquirrelStubIcon())'
+```
+
+正常情况直接跑 `make-squirrel.ts` 即可（delta 生成正常），它会在 `createWindowsInstaller` 之后自动调 `fix-squirrel-stub-icon.ts`（见坑 9）。
 
 ## 编译打包步骤（按顺序执行）
 
@@ -146,7 +157,79 @@ foreach ($f in @("icudtl.dat","d3dcompiler_47.dll","ffmpeg.dll","libEGL.dll","li
 Copy-Item "E:\AFFiNE\AFFiNE\LICENSE" "$appDir\LICENSE" -Force
 ```
 
+### 4.5. 用 rcedit 把 AFFiNE 图标嵌入到主 exe（必须在步骤 5 之前）
+
+手动 `Copy-Item electron.exe` 不会嵌入自定义图标，不补这一步 exe 会显示 Electron 默认图标。Squirrel 在每台机器安装时，从主 exe 的 `ProductName`/`CompanyName` 决定快捷方式显示名与文件夹；不改的话，装完开始菜单会叫 `GitHub, Inc.\Electron.lnk`，任务栏也是 Electron 图标——**换任何机器都复现**。
+
+**重要：** 项目里 `node_modules/electron-winstaller/vendor/rcedit.exe` 是**精简版**，只认 `--set-icon`，**不支持**改版本元数据。要改 `ProductName`/`CompanyName` 等必须用**完整版 rcedit v5.0.2**（`rcedit` npm 包，带 `--set-version-string`），已下载到 `node_modules/electron-winstaller/vendor/rcedit-full/package/bin/rcedit-x64.exe`。若本机还没有 `rcedit-full/`，先下载 `rcedit@5.0.2` 的 tarball 解包：
+
+```powershell
+& $NODE22 -e "(async()=>{const r=await fetch('https://registry.npmjs.org/rcedit/-/rcedit-5.0.2.tgz');const b=Buffer.from(await r.arrayBuffer());require('fs').writeFileSync('E:/AFFiNE/AFFiNE/node_modules/electron-winstaller/vendor/rcedit-full/rcedit-5.0.2.tgz',b)})()"
+tar -xzf node_modules/electron-winstaller/vendor/rcedit-full/rcedit-5.0.2.tgz -C node_modules/electron-winstaller/vendor/rcedit-full
+```
+
+```powershell
+cd $ELECTRON_DIR
+$exe    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe"
+$ico    = "E:\AFFiNE\AFFiNE\packages\frontend\apps\electron\resources\icons\icon_canary.ico"
+$rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit-full\package\bin\rcedit-x64.exe"   # 完整版
+
+# 1) 嵌图标（完整版 rcedit 用 --set-icon）
+& $rcedit $exe --set-icon $ico
+# 2) 改 PE 版本信息字符串（Squirrel 快捷方式名/图标依赖这些）
+& $rcedit $exe --set-version-string "CompanyName" "AFFiNE"
+& $rcedit $exe --set-version-string "FileDescription" "AFFiNE-canary"
+& $rcedit $exe --set-version-string "InternalName" "AFFiNE-canary"
+& $rcedit $exe --set-version-string "ProductName" "AFFiNE-canary"
+# 稳定版把上面四个值改成 "AFFiNE"（图标用 icon.ico）。
+```
+
+验证：嵌入后 exe 大小约 +16KB、mtime 更新；资源管理器里 exe 图标变为 AFFiNE。务必在 `createWindowsInstaller` 之前完成嵌入，否则 Setup.exe 里的 exe 仍是 Electron 图标。
+
+生成 Setup.exe 后必须验证 nupkg 里的 stub 已嵌入图标（否则分发到其它机器后开始菜单/任务栏仍是 Electron）：
+
+```powershell
+& $NODE22 --import tsx -e '
+import { execSync } from "node:child_process";
+import fs from "node:fs";
+const root = "E:/AFFiNE/AFFiNE/.tmp-stub-check";
+fs.rmSync(root, { recursive: true, force: true });
+fs.mkdirSync(root, { recursive: true });
+execSync("tar -xzf out/canary/make/squirrel.windows/x64/AFFiNE-canary-0.27.5-full.nupkg -C " + JSON.stringify(root) + " lib/net45/AFFiNE-canary_ExecutionStub.exe");
+const stub = fs.readFileSync(root + "/lib/net45/AFFiNE-canary_ExecutionStub.exe");
+const ico = fs.readFileSync("resources/icons/icon_canary.ico");
+let ok = 0;
+for (let i = 0; i < ico.readUInt16LE(4); i++) {
+  const e = 6 + i * 16;
+  const off = ico.readUInt32LE(e + 8);
+  const sz = ico.readUInt32LE(e + 12);
+  const d = ico.subarray(off, off + sz).subarray(0, 16);
+  console.log("image", ico[e] === 0 ? 256 : ico[e], "at", stub.indexOf(d));
+  if (stub.indexOf(d) !== -1) ok++;
+}
+fs.rmSync(root, { recursive: true, force: true });
+if (ok < ico.readUInt16LE(4)) { console.error("STUB ICON MISSING - Setup.exe will show Electron icon on fresh machines"); process.exit(1); }
+console.log("OK: stub icon embedded");
+'
+```
+
+或手动验证：解包 full nupkg，对 `lib/net45/AFFiNE-canary_ExecutionStub.exe` 做 ico 完整文件搜索（`indexOf` 整个 ico 文件 53568 字节，或搜 4 张图片的 `first8` 各自命中）。注意 rcedit 的 `--set-icon` 是把 ico 的**每张图**单独作为 RT_ICON 资源嵌入，不会保留完整 ico 文件；所以搜"整个 ico 文件连续字节"会漏判，必须按 ico 头解析各图片 offset/size 再逐张搜。
+
 ### 5. 生成 Squirrel 安装包
+
+生成 Setup.exe 后**必须验证 nupkg 里的 stub 已嵌入图标**：解包 `AFFiNE-canary-0.27.5-full.nupkg`，对 `lib/net45/AFFiNE-canary_ExecutionStub.exe` 用 ico 各图片前 16 字节做 `indexOf`，4 张全命中才算通过（见坑 9 的验证方法，**不要**用 ico 完整文件或 ico 头 8 字节搜索）。
+
+生成 Setup.exe 后**必须验证 nupkg 里的 stub 已嵌入图标**：解包 `AFFiNE-canary-0.27.5-full.nupkg`，对 `lib/net45/AFFiNE-canary_ExecutionStub.exe` 用 ico 各图片前 16 字节做 `indexOf`，4 张全命中才算通过。
+
+本机直接跑 `make-squirrel.ts` 会在 delta 阶段失败（**坑 3**：`The base package release does not exist`，因为 out 目录里没有旧版 full nupkg 基线，`remoteReleases` 也没有配）。此时改用 `noDelta: true` 的等价调用（AGENT.md 步骤 5 已给脚本），**并手动补跑 `fix-squirrel-stub-icon.ts`**——内联脚本绕过了 `make-squirrel.ts` 的 hook：
+
+```powershell
+& $NODE22 --import tsx -e '
+import("./scripts/fix-squirrel-stub-icon.ts").then(m => m.fixSquirrelStubIcon())
+'
+```
+
+`make-squirrel.ts` 在 `createWindowsInstaller` 之后会自动调用 `fix-squirrel-stub-icon.ts`（见坑 9）：解包 full nupkg，用 rcedit-full 给 `lib/net45/<appName>_ExecutionStub.exe` 嵌入 app 图标 + 版本字符串，重新打包 nupkg，再 `Squirrel.exe --releasify` 重新生成 Setup.exe。手动绕过 `make-squirrel.ts`（如上面的 `--import tsx -e` 内联脚本）直接调 `createWindowsInstaller` 时，记得也要自己跑一遍 fix-squirrel-stub-icon，否则 stub 图标还是 Electron。
 
 `make-squirrel.ts` 默认会生成 delta 包，但 delta 需要旧 full nupkg 作为基线。如果没有基线包，用 `noDelta: true` 跳过：
 
@@ -194,17 +277,18 @@ cd $ELECTRON_DIR
 
 ## 关键注意事项
 
-| 项                 | 说明                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------- |
-| Node 版本          | 必须用 Node 22（`C:\node22\node-v22.23.3-win-x64\node.exe`），系统 Node 26 不满足 engines 约束    |
-| Yarn 调用          | 直接用 `node .yarn/releases/yarn-4.18.0.cjs`，yarn 不在 PATH                                      |
-| forge CLI          | 根目录 `node_modules/@electron-forge/cli/dist/electron-forge.js`，workspace node_modules 里找不到 |
-| forge 依赖 yarn    | forge 内部 spawn `yarn` 命令，需要创建 `yarn.cmd` shim 并加入 PATH                                |
-| forge package 失败 | Windows 上 forge 的 electron-packager 因 `node_modules` 软链接报 ENOENT，需手动构造打包目录       |
-| make-squirrel 依赖 | 需要 `out/canary/AFFiNE-canary-win32-x64` 完整目录（含 exe、dll、locales、resources/app）         |
-| delta 包           | 无基线 full nupkg 时 delta 生成失败，需 `noDelta: true` 跳过                                      |
-| 构建耗时           | 全量 10-30 分钟                                                                                   |
-| 输出目录           | `out/canary/make/squirrel.windows/x64/AFFiNE-canary-0.27.5 Setup.exe` 为最终安装包                |
+| 项                 | 说明                                                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Node 版本          | 必须用 Node 22（`C:\node22\node-v22.23.3-win-x64\node.exe`），系统 Node 26 不满足 engines 约束                             |
+| Yarn 调用          | 直接用 `node .yarn/releases/yarn-4.18.0.cjs`，yarn 不在 PATH                                                               |
+| forge CLI          | 根目录 `node_modules/@electron-forge/cli/dist/electron-forge.js`，workspace node_modules 里找不到                          |
+| forge 依赖 yarn    | forge 内部 spawn `yarn` 命令，需要创建 `yarn.cmd` shim 并加入 PATH                                                         |
+| forge package 失败 | Windows 上 forge 的 electron-packager 因 `node_modules` 软链接报 ENOENT，需手动构造打包目录                                |
+| make-squirrel 依赖 | 需要 `out/canary/AFFiNE-canary-win32-x64` 完整目录（含 exe、dll、locales、resources/app）                                  |
+| delta 包           | 无基线 full nupkg 时 delta 生成失败，需 `noDelta: true` 跳过                                                               |
+| 构建耗时           | 全量 10-30 分钟                                                                                                            |
+| Squirrel stub 图标 | stub 不继承 app 图标，开始菜单/任务栏显示 Electron；`make-squirrel.ts` 已自动调 `fix-squirrel-stub-icon.ts` 修复（见坑 9） |
+| 输出目录           | `out/canary/make/squirrel.windows/x64/AFFiNE-canary-0.27.5 Setup.exe` 为最终安装包                                         |
 
 ## 验证清单
 
@@ -361,6 +445,18 @@ $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
 - `robocopy resources/icons → resources/app/resources/icons`，补齐托盘/窗口图标素材。
 - 重跑 rcedit（坑 7）嵌入 exe 图标后，**重装** Squirrel（`%LOCALAPPDATA%\apps\AFFiNE-canary` 那份 exe 才会带上图标），任务栏图标才更新——光改 `out/` 里的 exe 不重装，任务栏不变。
 
+### 坑 9：Squirrel 执行桩（ExecutionStub）不继承 app 图标，开始菜单/任务栏显示 Electron 图标
+
+**现象：** 安装包（Setup.exe）里的主 exe（约 210MB）图标正确，但从开始菜单启动时任务栏/开始菜单里仍是 Electron 默认图标。安装后自动启动正常，从开始菜单启动才暴露问题。
+
+**根因：** electron-winstaller 生成的 Squirrel 执行桩 `lib/net45/<appName>_ExecutionStub.exe`（约 309KB）**不嵌入 app 图标**。Squirrel 首次安装时把该桩部署到 `%LOCALAPPDATA%/<app>/<app>.exe`（本机为 `C:\Users\xqyi\AppData\Local\AFFiNE-canary\AFFiNE-canary.exe`），开始菜单/任务栏快捷方式（`.lnk` 的 `IconLocation`）指向的就是这个桩，而非 resources/app 里的完整 exe。桩没有图标 → Windows 回退到 Electron 默认图标。任意新机器安装后都会复现。
+
+**修复（已自动 hook，commit 7fde30251）：** 新增 `packages/frontend/apps/electron/scripts/fix-squirrel-stub-icon.ts`，在 `make-squirrel.ts` 的 `createWindowsInstaller` 之后自动执行：解包 full nupkg → 对 `lib/net45/<appName>_ExecutionStub.exe` 跑 `rcedit-full`（`--set-icon` 嵌 `resources/icons/icon_canary.ico` + 4 个 version-string）→ 重新打包 nupkg → `Squirrel.exe --releasify --setupIcon <ico> --no-msi --no-delta` 重新生成 Setup.exe。
+
+**验证方法：** 解包 Setup.exe 附带的 nupkg，对桩 exe 做二进制搜索 ico 文件头 8 字节（`00 00 01 00 00 01 ...`），命中即成功（本机 offset ≈ 297908）。**不要看 exe 大小判断**——rcedit `--set-icon` 是替换资源段，stub 已有 `.rsrc` 段时总大小不变（309248）。另注意 rcedit 要用完整版 `rcedit-full`（精简版 `vendor/rcedit.exe` 不支持 `--set-icon` 之外的能力，见步骤 4.5）。
+
+**本机手动验证快捷方式：** 若只想在本机立刻看到效果（不重装），用 WScript.Shell 把 `C:\Users\xqyi\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\AFFiNE\AFFiNE-canary.lnk` 的 `IconLocation` 改为主 exe 路径 `C:\Users\xqyi\AppData\Local\AFFiNE-canary\App-<版本>\AFFiNE-canary.exe,0`——仅对本机有效，跨机器必须靠修复后的桩。
+
 ## 构建/打包注意事项（务必遵守，踩过坑）
 
 ### 必须用 Node 22 编译
@@ -380,3 +476,31 @@ $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit.exe"
 
 - 打包入口：`packages/frontend/apps/electron`
 - 用 Node 22 绝对路径运行 forge/make 相关脚本，产物（`Setup.exe` 等）落在该目录 build 输出里
+  生成 Setup.exe 后必须验证 nupkg 里的 stub 已嵌入图标（否则分发到其它机器后开始菜单/任务栏仍是 Electron）：
+
+```powershell
+& $NODE22 --import tsx -e '
+import { execSync } from "node:child_process";
+import fs from "node:fs";
+const root = "E:/AFFiNE/AFFiNE/.tmp-stub-check";
+fs.rmSync(root, { recursive: true, force: true });
+fs.mkdirSync(root, { recursive: true });
+execSync("tar -xzf out/canary/make/squirrel.windows/x64/AFFiNE-canary-0.27.5-full.nupkg -C " + JSON.stringify(root) + " lib/net45/AFFiNE-canary_ExecutionStub.exe");
+const stub = fs.readFileSync(root + "/lib/net45/AFFiNE-canary_ExecutionStub.exe");
+const ico = fs.readFileSync("resources/icons/icon_canary.ico");
+let ok = 0;
+for (let i = 0; i < ico.readUInt16LE(4); i++) {
+  const e = 6 + i * 16;
+  const off = ico.readUInt32LE(e + 8);
+  const sz = ico.readUInt32LE(e + 12);
+  const d = ico.subarray(off, off + sz).subarray(0, 16);
+  console.log("image", ico[e] === 0 ? 256 : ico[e], "at", stub.indexOf(d));
+  if (stub.indexOf(d) !== -1) ok++;
+}
+fs.rmSync(root, { recursive: true, force: true });
+if (ok < ico.readUInt16LE(4)) { console.error("STUB ICON MISSING - Setup.exe will show Electron icon on fresh machines"); process.exit(1); }
+console.log("OK: stub icon embedded");
+'
+```
+
+或手动验证：解包 full nupkg，对 `lib/net45/AFFiNE-canary_ExecutionStub.exe` 按 ico 头解析出每张图的 offset/size，取前 16 字节逐张 `indexOf`（rcedit 把 ico 拆成多张 RT_ICON 资源嵌入，完整 ico 文件或 ico 头 8 字节搜索都会漏判）。
