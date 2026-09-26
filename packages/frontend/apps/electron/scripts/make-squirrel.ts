@@ -5,6 +5,7 @@ import type { Options as ElectronWinstallerOptions } from 'electron-winstaller';
 import { convertVersion, createWindowsInstaller } from 'electron-winstaller';
 import fs from 'fs-extra';
 
+import { fixSquirrelStubIcon } from './fix-squirrel-stub-icon.js';
 import {
   arch,
   buildType,
@@ -49,6 +50,11 @@ async function make() {
   };
 
   await createWindowsInstaller(winstallerConfig);
+  // electron-winstaller does not embed the app icon into the Squirrel
+  // execution stub, so the Start Menu / taskbar shortcut created on
+  // first install would show the default Electron icon. Fix the stub
+  // icon and regenerate Setup.exe before reporting artifacts.
+  await fixSquirrelStubIcon();
   const nupkgVersion = convertVersion(packageJSON.version);
   const artifacts = [
     path.resolve(outPath, 'RELEASES'),
