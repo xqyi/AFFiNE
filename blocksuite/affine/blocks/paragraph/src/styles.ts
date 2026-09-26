@@ -22,7 +22,6 @@ export const paragraphBlockStyles = css`
   }
 
   affine-paragraph code {
-    font-size: calc(var(--affine-font-base) - 3px);
     padding: 0px 4px 2px;
   }
 
