@@ -1,3 +1,5 @@
+import './typography.css';
+
 import { cssVar } from '@toeverything/theme';
 import { globalStyle } from '@vanilla-extract/css';
 
