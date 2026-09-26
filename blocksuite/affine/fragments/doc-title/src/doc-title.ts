@@ -20,8 +20,8 @@ const DOC_BLOCK_CHILD_PADDING = 24;
 export class DocTitle extends WithDisposable(ShadowlessElement) {
   static override styles = css`
     .doc-title-container {
-      font-size: 40px;
-      line-height: 50px;
+      font-size: var(--affine-font-title, 30px);
+      line-height: var(--affine-font-title-line-height, 40px);
       font-weight: 700;
     }
     .doc-icon-container,
