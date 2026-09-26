@@ -1,0 +1,37 @@
+== TASK-2 REVIEW base=115315e48 head=17ba6509c ==
+17ba6509c refactor(doc-title): drive title size/line-height from --affine-font-title vars
+
+== stat ==
+ blocksuite/affine/fragments/doc-title/src/doc-title.ts | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+== diff -U10 ==
+diff --git a/blocksuite/affine/fragments/doc-title/src/doc-title.ts b/blocksuite/affine/fragments/doc-title/src/doc-title.ts
+index c3e23f024..54179f002 100644
+--- a/blocksuite/affine/fragments/doc-title/src/doc-title.ts
++++ b/blocksuite/affine/fragments/doc-title/src/doc-title.ts
+@@ -13,22 +13,22 @@ import { ShadowlessElement } from '@blocksuite/std';
+ import type { Store } from '@blocksuite/store';
+ import { effect } from '@preact/signals-core';
+ import { css, html } from 'lit';
+ import { property, query, state } from 'lit/decorators.js';
+ 
+ const DOC_BLOCK_CHILD_PADDING = 24;
+ 
+ export class DocTitle extends WithDisposable(ShadowlessElement) {
+   static override styles = css`
+     .doc-title-container {
+-      font-size: 40px;
+-      line-height: 50px;
++      font-size: var(--affine-font-title, 30px);
++      line-height: var(--affine-font-title-line-height, 40px);
+       font-weight: 700;
+     }
+     .doc-icon-container,
+     .doc-title-container {
+       box-sizing: border-box;
+       font-family: var(--affine-font-family);
+       color: var(--affine-text-primary-color);
+       outline: none;
+       resize: none;
+       border: 0;
