@@ -10,9 +10,6 @@
   "author": "toeverything",
   "license": "MIT",
   "dependencies": {
-    "@vanilla-extract/vite-plugin": "^0.10.8",
-    "unplugin-swc": "^1.5.3",
-    "vitest": "^3.2.4",
     "@blocksuite/affine-block-note": "workspace:*",
     "@blocksuite/affine-ext-loader": "workspace:*",
     "@blocksuite/affine-fragment-doc-title": "workspace:*",
@@ -26,7 +23,10 @@
     "@preact/signals-core": "^1.8.0",
     "@toeverything/theme": "^1.1.23",
     "@vanilla-extract/css": "^1.17.0",
-    "lit": "^3.2.0"
+    "@vanilla-extract/vite-plugin": "^5.0.0",
+    "lit": "^3.2.0",
+    "unplugin-swc": "^1.5.3",
+    "vitest": "^3.2.4"
   },
   "exports": {
     ".": "./src/index.ts",
