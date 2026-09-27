@@ -148,6 +148,9 @@ Copy-Item "$electronDist\electron.exe" "$appDir\AFFiNE-canary.exe" -Force
 # 复制 locales
 robocopy "$electronDist\locales" "$appDir\locales" /MIR /NFL /NDL /NJH /NJS
 
+# 复制 V8 snapshot（缺了 exe 启动直接 FATAL: Error loading V8 startup snapshot，窗口一片空白连标题栏都没有）
+Copy-Item "$electronDist\snapshot_blob.bin" "$appDir\snapshot_blob.bin" -Force
+Copy-Item "$electronDist\v8_context_snapshot.bin" "$appDir\v8_context_snapshot.bin" -Force
 # 复制必要 dll 和 dat
 foreach ($f in @("icudtl.dat","d3dcompiler_47.dll","ffmpeg.dll","libEGL.dll","libGLESv2.dll")) {
     if (Test-Path "$electronDist\$f") { Copy-Item "$electronDist\$f" "$appDir\$f" -Force }
