@@ -28,6 +28,8 @@
     "build:dev": "node ./scripts/build-layers.ts",
     "generate-assets": "node ./scripts/generate-assets.ts",
     "package": "electron-forge package",
+    "package-green": "node --import tsx ./scripts/package-green.ts",
+    "stage-runtime-deps": "node ./scripts/stage-runtime-deps.mjs",
     "make": "electron-forge make",
     "make-squirrel": "node ./scripts/make-squirrel.ts",
     "make-nsis": "node ./scripts/make-nsis.ts"

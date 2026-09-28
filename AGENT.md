@@ -160,6 +160,26 @@ foreach ($f in @("icudtl.dat","d3dcompiler_47.dll","ffmpeg.dll","libEGL.dll","li
 Copy-Item "E:\AFFiNE\AFFiNE\LICENSE" "$appDir\LICENSE" -Force
 ```
 
+### 4.4. 复制 esbuild external 的运行时依赖（必须，缺了 exe 启动即报 Cannot find module）
+
+`scripts/common.ts` 里 `external: ['electron', 'electron-updater', 'yjs', 'semver']` —— 这些包**不会**被 esbuild 打进 `dist/main.js` / `dist/helper.js`，也没进 `out/.../resources/app`，因此必须在 `resources/app/node_modules` 里放真实副本（含传递依赖）。漏了这步，exe 起来就弹：
+
+> A JavaScript error occurred in the main process
+> Uncaught Exception:
+> Error: Cannot find module 'electron-updater'
+> Require stack: ...\resources\app\dist\main.js
+
+```powershell
+cd $ELECTRON_DIR
+& $NODE22 ./scripts/stage-runtime-deps.mjs "$resourcesApp" "E:\AFFiNE\AFFiNE-0274"
+```
+
+脚本扫描 `dist/*.js` 里的 `require('...')`，按 Node 的解析顺序（父包自带的 `node_modules` 优先于提升到仓库根的版本）复制 `electron-updater`、`yjs`、`semver` 及其传递依赖（共 19 个），最后逐个校验模块都能从 app 目录**内部**解析到，解析到目录外就直接报错退出（非 0）。
+
+> **为什么开发机上"有时看着能跑"：** `resources/app/dist` 只是仓库根的若干层子目录，Node 逐级向上找 `node_modules` 时会**意外命中仓库根 `node_modules`**，于是本机侥幸不报错；把目录移走/拷贝到别处/Squirrel 装到 `%LOCALAPPDATA%\AFFiNE-canary\app-<version>` 之后，这条向上查找断开，错误必然出现。**不要用"本机能跑"来判断这个包是否完整。**
+
+> **本仓库更省事的等价流程：** `yarn workspace @affine/electron package-green`（`scripts/package-green.ts`）一次性完成上面步骤 4 + 4.4 的全部内容：同步 `dist/`、`resources/icons`、`resources/web-static` 与 `app-update.yml`、注入 `productName`、暂存运行时 `node_modules`、拷贝 Electron runtime，并删除残留的 `resources/app.asar`（残留 asar 会优先于 `resources/app` 被加载，导致跑的还是旧包）。它还会用 `node_modules/electron/dist/electron.exe` 覆盖目标 exe，所以图标/版本信息内嵌（步骤 4.5）必须在 **package-green 之后再跑一次**。
+
 ### 4.5. 用 rcedit 把 AFFiNE 图标嵌入到主 exe（必须在步骤 5 之前）
 
 手动 `Copy-Item electron.exe` 不会嵌入自定义图标，不补这一步 exe 会显示 Electron 默认图标。Squirrel 在每台机器安装时，从主 exe 的 `ProductName`/`CompanyName` 决定快捷方式显示名与文件夹；不改的话，装完开始菜单会叫 `GitHub, Inc.\Electron.lnk`，任务栏也是 Electron 图标——**换任何机器都复现**。
@@ -186,6 +206,18 @@ $rcedit = "E:\AFFiNE\AFFiNE\node_modules\electron-winstaller\vendor\rcedit-full\
 & $rcedit $exe --set-version-string "ProductName" "AFFiNE-canary"
 # 稳定版把上面四个值改成 "AFFiNE"（图标用 icon.ico）。
 ```
+
+**更省事的做法（推荐）：** 上面那五条 rcedit 可以让仓库脚本一次做完——它自动挑 `rcedit-full`、同时写入图标与 4 个 version string，并逐张校验 ico 的每张图已落进 PE 资源段：
+
+```powershell
+cd $ELECTRON_DIR
+# 嵌入（exe 被运行中的实例占用会失败：Fatal error: Unable to commit changes，先退出应用）
+& $NODE22 ./scripts/embed-exe-icon.mjs $exe --icon $ico --product-name AFFiNE-canary
+# 只校验不改文件（应用正在运行、exe 被占用时也能查）
+& $NODE22 ./scripts/embed-exe-icon.mjs $exe --icon $ico --verify-only
+```
+
+成功时输出 `verified: 4 icon image(s) present in AFFiNE-canary.exe (size 210896896 -> 210913280)`。**绿色包每次重新拷贝 exe 之后都必须重跑这一步**（AFFiNE-0274 的 `package-green` 已内置自动嵌入，末尾会打印 `exe icon/version resources: embedded`）。
 
 验证：嵌入后 exe 大小约 +16KB、mtime 更新；资源管理器里 exe 图标变为 AFFiNE。务必在 `createWindowsInstaller` 之前完成嵌入，否则 Setup.exe 里的 exe 仍是 Electron 图标。
 
