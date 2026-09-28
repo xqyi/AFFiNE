@@ -46,7 +46,14 @@
 
 - **必须使用 Node.js 22.x**。系统默认 Node（v26 等）不满足仓库 `engines` 约束，原生构建与 rspack 均可能失败。执行前先 `node --version` 确认。
 - 🔴 **Node 22 位置**：`C:\node22\node-v22.23.3-win-x64\node.exe`，下文记作 `$NODE22`。**此为 2026-09-28 记录值，失效则询问用户**，不要自行搜索或猜测。
-- 🟢 **不要用 `yarn` 命令**。本机无 yarn shim，直接调用仓库内 release（`<repo>\.yarn\releases\yarn-*.cjs`，版本号可能随仓库变化，先 `Get-ChildItem .yarn\releases` 确认）：
+- 🟢 **可以直接用 `yarn`**（2026-09-28 已安装 shim）。`C:\Users\xqyi\.yarn-shim` 已置于用户 PATH 最前，内含 `yarn` / `yarn.cmd` / `yarn.ps1` 与 `yarn-shim.mjs`：
+  - 从当前目录向上找带 `packageManager: yarn@<v>` 的 `package.json`，运行该仓库 `.yarn\releases\yarn-<v>.cjs`；
+  - 解释器固定为上面的 `$NODE22`，并把 Node 22 置于子进程 `PATH` 首位，因此 yarn 生命周期脚本里调用的 `node` 也是 v22 而不是系统默认的 v26；
+  - 非 yarn 仓库下回退到 corepack；
+  - 设了 `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`，无人值守场景（husky hook）不会卡在下载确认提示上。
+  - 换机器或升级 Node 22 路径后需同步修改 `yarn-shim.mjs` 顶部的 `NODE22_DIR`。
+  - **husky 的 `pre-commit`（`yarn lint-staged && yarn lint:ox`）现在可以正常跑，不要再默认加 `--no-verify`。** 注意 `lint-staged` 在「无暂存文件」时会以非 0 退出并中止 hook，因此空提交（`--allow-empty`）过不了 pre-commit，这是预期行为。
+- 🟢 若 shim 不可用，仍可直接调用仓库内 release（`<repo>\.yarn\releases\yarn-*.cjs`，版本号可能随仓库变化，先 `Get-ChildItem .yarn\releases` 确认）：
   ```powershell
   & $NODE22 .yarn\releases\yarn-4.18.0.cjs <args>
   ```
