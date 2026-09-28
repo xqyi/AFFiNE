@@ -26,15 +26,12 @@ export const cardPreview = style({
   borderRadius: '4px',
   cursor: 'default',
   userSelect: 'none',
+  // 卡片底色始终与面板背景一致：hover / selected / dragging 一律不加背景色。
+  // 之前 hover 与 selected 会铺一层 layer/background/hoverOverlay，导致
+  // 「鼠标在卡片上时高亮、移开就没了」，看起来像选中状态时有时无。
+  // 交互反馈仍由 cursor: pointer、拖拽时的 opacity 与标题高亮颜色承担。
   selectors: {
-    [`${outlineCard}[data-sortable="true"] &:hover`]: {
-      background: cssVarV2('layer/background/hoverOverlay'),
-    },
-    [`${outlineCard}[data-status="selected"] &`]: {
-      background: cssVarV2('layer/background/hoverOverlay'),
-    },
     [`${outlineCard}[data-status="dragging"] &`]: {
-      background: cssVarV2('layer/background/hoverOverlay'),
       opacity: 0.9,
     },
   },
@@ -169,18 +166,24 @@ export const outlineRow = style({
   display: 'block',
 });
 
+// 展开态：实心箭头旋转 90° 指向下。
 export const toggle = style({
   display: 'inline-flex',
   flexShrink: 0,
   alignItems: 'center',
   justifyContent: 'center',
-  width: '1.2em',
-  height: '1.2em',
+  // 盒高铺满 22px 行盒并顶对齐，使箭头与文字严格垂直居中
+  // （vertical-align: middle 会相对 x-height 对齐，反而偏移 1.7px）。
+  width: '16px',
+  height: '100%',
+  verticalAlign: 'top',
+  lineHeight: 0,
   marginRight: '0',
   border: 'none',
   background: 'transparent',
   cursor: 'pointer',
   color: cssVarV2('icon/primary'),
+  transform: 'rotate(90deg)',
   transition: 'transform 150ms ease',
   selectors: {
     '&:hover': {
@@ -189,8 +192,9 @@ export const toggle = style({
   },
 });
 
+// 折叠态：箭头指向右，不旋转。
 export const toggleCollapsed = style({
-  transform: 'rotate(-90deg)',
+  transform: 'rotate(0deg)',
 });
 
 export const toggleSpacer = style({

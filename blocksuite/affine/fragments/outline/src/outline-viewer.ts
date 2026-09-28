@@ -31,6 +31,19 @@ import {
 
 export const AFFINE_OUTLINE_VIEWER = 'affine-outline-viewer';
 
+// 实心三角箭头（指向右）。展开态旋转 90° 变为朝下。
+// 尺寸用绝对值，避免 button 不继承 font-size 时 em 解析到 UA 默认值。
+const solidArrowSvg = (size = '8px', expanded = false) => html`<svg
+  data-icon="solid-arrow"
+  viewBox="0 0 10 10"
+  width=${size}
+  height=${size}
+  fill="currentColor"
+  style=${expanded ? 'transform: rotate(90deg);' : ''}
+>
+  <path d="M2 1 L8 5 L2 9 Z" />
+</svg>`;
+
 @requiredProperties({
   editor: PropTypes.object,
 })
@@ -159,6 +172,14 @@ export class OutlineViewer extends SignalWatcher(
       background: transparent;
       cursor: pointer;
       color: var(--affine-icon-primary-color);
+      /* 与同行文字垂直居中对齐，而非基线对齐。 */
+      vertical-align: middle;
+      line-height: 0;
+      transition: transform 120ms var(--timing);
+    }
+
+    .outline-viewer-item-toggle svg {
+      display: block;
     }
 
     .outline-viewer-item-toggle-spacer {
@@ -167,6 +188,7 @@ export class OutlineViewer extends SignalWatcher(
       height: 1em;
       flex-shrink: 0;
       margin-right: 4px;
+      vertical-align: middle;
     }
 
     .outline-viewer-root:hover {
@@ -369,26 +391,7 @@ export class OutlineViewer extends SignalWatcher(
                             );
                           }}
                         >
-                          ${
-                            row.collapsed
-                              ? html`<svg
-                                  style="transform: rotate(-90deg)"
-                                  data-icon="chevron"
-                                  viewBox="0 0 16 16"
-                                  width="1em"
-                                  height="1em"
-                                >
-                                  <path fill="currentColor" d="M4 6l4 4 4-4" />
-                                </svg>`
-                              : html`<svg
-                                  data-icon="chevron"
-                                  viewBox="0 0 16 16"
-                                  width="1em"
-                                  height="1em"
-                                >
-                                  <path fill="currentColor" d="M4 6l4 4 4-4" />
-                                </svg>`
-                          }
+                          ${solidArrowSvg('8px', !row.collapsed)}
                         </button>`
                       : html`<span
                           class="outline-viewer-item-toggle-spacer"

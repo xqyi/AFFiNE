@@ -12,7 +12,7 @@ import { DocDisplayMetaProvider } from '@blocksuite/affine-shared/services';
 import type { AffineTextAttributes } from '@blocksuite/affine-shared/types';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { noop } from '@blocksuite/global/utils';
-import { ArrowDownSmallIcon, LinkedPageIcon } from '@blocksuite/icons/lit';
+import { LinkedPageIcon } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
 import type { BlockModel, DeltaInsert } from '@blocksuite/store';
 import { consume } from '@lit/context';
@@ -38,6 +38,18 @@ function assertType<T>(value: unknown): asserts value is T {
 }
 
 export const AFFINE_OUTLINE_BLOCK_PREVIEW = 'affine-outline-block-preview';
+
+// 实心三角箭头（指向右）。展开态通过 CSS 旋转 90° 变为朝下。
+// 尺寸用绝对值，避免 button 不继承 font-size 时 em 解析到 UA 默认值。
+const solidArrowIcon = (size = '8px') => html`<svg
+  viewBox="0 0 10 10"
+  width=${size}
+  height=${size}
+  fill="currentColor"
+  style="display: block;"
+>
+  <path d="M2 1 L8 5 L2 9 Z" />
+</svg>`;
 
 export class OutlineBlockPreview extends SignalWatcher(
   WithDisposable(ShadowlessElement)
@@ -279,7 +291,7 @@ export class OutlineBlockPreview extends SignalWatcher(
           ?.dispatchEvent(ev);
       }}
     >
-      ${ArrowDownSmallIcon({ width: '1em', height: '1em' })}
+      ${solidArrowIcon()}
     </button>`;
   }
 

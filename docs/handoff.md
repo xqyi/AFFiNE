@@ -118,18 +118,54 @@ while (-not $p.HasExited) { Start-Sleep -Seconds 5 }
 
 #### 步骤 3 — 同步 web 资源到 Electron
 
-```powershell
-$env:SKIP_WEB_BUILD = "true"
-& $NODE22 packages\frontend\apps\electron\scripts\generate-assets.ts
-Remove-Item Env:\SKIP_WEB_BUILD
+> 🔴 **不要用 `SKIP_WEB_BUILD=true` + `generate-assets.ts` 来做同步——那样等于什么都不做。**
+
+`scripts/generate-assets.ts` 里负责复制的 `fs.move` 写在 `if (!process.env.SKIP_WEB_BUILD)` 块**内部**（该文件第 47–63 行）：
+
+```ts
+if (!process.env.SKIP_WEB_BUILD) {
+  spawnSync('yarn', ['affine', '@affine/electron-renderer', 'build'], ...);
+  spawnSync('yarn', ['affine', '@affine/electron', 'build'], ...);
+  await fs.move(affineWebOutDir, publicAffineOutDir, { overwrite: true });  // ← 同步在这里
+}
 ```
 
-- **必须设 `SKIP_WEB_BUILD=true`**。该脚本默认会 `spawnSync('yarn', ['affine', '@affine/electron-renderer', 'build'])`，本机无 yarn 会失败；且步骤 2 已经构建过，属重复劳动。
-- 脚本把 `electron-renderer/dist` 整体 move 到 `packages/frontend/apps/electron/resources/web-static`。
-- 校验：
-  ```powershell
-  Select-String -Path "packages\frontend\apps\electron\resources\web-static\js\*.js" -Pattern 'appVersion:"0\.27\.[0-9]+"' -AllMatches
-  ```
+所以 `SKIP_WEB_BUILD` 并不是"跳过重复构建、但仍然同步"，而是**连同步一起跳过**。设了它，脚本会打印一大段 `build with following variables {...}` 后以 `exit=0` 正常退出，`web-static` 却纹丝不动——**退出码 0 不代表同步成功**。
+
+本机又不能用 `yarn`（无 shim），于是唯一可行路径是手动同步（与 `AGENT.md` 步骤 2 一致）：
+
+```powershell
+$src = "E:\AFFiNE\AFFiNE-0274\packages\frontend\apps\electron-renderer\dist"
+$dst = "E:\AFFiNE\AFFiNE-0274\packages\frontend\apps\electron\resources\web-static"
+robocopy $src $dst /MIR /NFL /NDL /NJH /NJS
+# exit 0–7 均算成功；>=8 才是真失败
+```
+
+> 使用 `robocopy /MIR` 而非 `Remove-Item`（后者在本机被系统策略拦截）。`/MIR` 会顺带删除目标目录里源已不存在的旧 chunk，这正是我们要的。
+
+**校验（三条都要过，尤其第 1 条）**：
+
+```powershell
+# 1. 关键：确认 web-static 里的 chunk hash 与 renderer dist 一致
+#    hash 不一致 = 同步没生效，打出来的是旧包
+Get-ChildItem "packages\frontend\apps\electron-renderer\dist\js\5503*.js" | Select-Object Name
+Get-ChildItem "packages\frontend\apps\electron\resources\web-static\js\5503*.js" | Select-Object Name
+
+# 2. 确认烘焙的版本号
+Select-String -Path "packages\frontend\apps\electron\resources\web-static\js\*.js" `
+  -Pattern 'appVersion:"0\.27\.[0-9]+"' -AllMatches |
+  ForEach-Object { $_.Matches.Value } | Sort-Object -Unique
+
+# 3. 确认 index.html 的所有 script 引用都能解析（防孤儿/缺失 chunk）
+$html = Get-Content "packages\frontend\apps\electron\resources\web-static\index.html" -Raw
+$refs = [regex]::Matches($html, '(?:src|href)="([^"]+\.js)"') | ForEach-Object { $_.Groups[1].Value }
+$missing = $refs | Where-Object { -not (Test-Path (Join-Path "packages\frontend\apps\electron\resources\web-static" ($_ -replace '^/',''))) }
+if ($missing) { "MISSING: $($missing -join ', ')" } else { "all $($refs.Count) refs resolve" }
+```
+
+> **本次实际踩到**：照旧文档跑完，`generate-assets exit=0` 看着一切正常，但 web-static 最新 chunk 的时间戳还停在**上一次构建**（10:33 vs 本次 17:42），hash 是 `5503.448eb17e` 而非新构建的 `5503.7556a46e`——**包里根本没有本次改动**。只靠"脚本退出码"验收会直接漏掉这个问题。
+>
+> 另外 robocopy 输出里的 `*EXTRA File` 是目标目录的旧 chunk 被删除，属预期行为，不是错误。
 
 #### 步骤 4 — 构建 Electron 主进程 layers
 
@@ -176,14 +212,16 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
 
 **静态校验（打包后立即执行，比启动验证快）：**
 
-| 检查项    | 命令                                                                                          | 期望                                                           |
-| --------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 应用版本  | `Get-Content <app>\package.json`                                                              | `"version": "0.27.4"`                                          |
-| 烘焙版本  | `Select-String <app>\resources\web-static\js\7592.*.js -Pattern 'appVersion:"0\.27\.[0-9]+"'` | `0.27.4`                                                       |
-| 无孤儿包  | `Get-ChildItem <app>\resources\web-static\js -Filter "*7592*"`                                | 只有一个 chunk hash                                            |
-| 入口一致  | `Select-String <app>\resources\web-static\index.html -Pattern '7592'`                         | 指向新 hash                                                    |
-| PE 元数据 | `(Get-Item <exe>).VersionInfo`                                                                | `ProductName/InternalName=AFFiNE-canary`、`CompanyName=AFFiNE` |
-| 图标      | 见下方命令                                                                                    | `verified: 4 icon image(s) present`                            |
+| 检查项     | 命令                                                                                                 | 期望                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 同步生效   | 比对 `<renderer>\dist\js\<chunk>.js` 与 `<app>\resources\web-static\js\<chunk>.js` 的**文件名 hash** | 两者完全相同（hash 不同 = 打的是旧包，见「常见误判」）         |
+| 改动已入包 | `Select-String <app>\resources\web-static\js\*.js -Pattern '<本次改动的特征串>'`                     | 有命中                                                         |
+| 应用版本   | `Get-Content <app>\package.json`                                                                     | `"version": "0.27.4"`                                          |
+| 烘焙版本   | `Select-String <app>\resources\web-static\js\7592.*.js -Pattern 'appVersion:"0\.27\.[0-9]+"'`        | `0.27.4`                                                       |
+| 无孤儿包   | `Get-ChildItem <app>\resources\web-static\js -Filter "*7592*"`                                       | 只有一个 chunk hash                                            |
+| 入口一致   | `Select-String <app>\resources\web-static\index.html -Pattern '7592'`                                | 指向新 hash                                                    |
+| PE 元数据  | `(Get-Item <exe>).VersionInfo`                                                                       | `ProductName/InternalName=AFFiNE-canary`、`CompanyName=AFFiNE` |
+| 图标       | 见下方命令                                                                                           | `verified: 4 icon image(s) present`                            |
 
 > 🟢 `<app>` = `<repo>\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\resources\app`
 > 🟢 `<exe>` = `<repo>\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe`
@@ -208,6 +246,8 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
 
 ### 5. 常见误判
 
+- **同步步骤"成功退出"不等于 web-static 已更新**——见「可累积避坑 → 同步 renderer 产物时，"跳过构建"不等于"仍然同步"」。`SKIP_WEB_BUILD` 会连 `fs.move` 一起跳过，脚本仍 `exit=0`。**必须比对 chunk hash**，不能只看退出码。
+- **renderer dist 与 web-static 的 chunk hash 不一致** = 同步没生效。hash 变了而 web-static 的还是旧的，说明本次改动根本没进包，重新同步后再打包。
 - **`dist/main.js` / `helper.js` 里搜到 `0.27.0` 属正常**——那是 napi-rs 的 `bindingPackageVersion !== "0.27.0"` 版本校验字符串，与应用版本无关。
 - **Windows 任务栏图标只认 exe 内嵌 PE 资源**。rcedit 必须在打包时执行；绿色包已内置。若想换成正式版黑色菱形图标，把 `package-green.ts` 中 `buildType === 'stable' ? 'icon.ico' : icon_${buildType}.ico` 改为固定 `icon.ico`（行号会随文件改动漂移，用 `Select-String -Pattern "iconName"` 定位，**不要照抄行号 237**）。
 - **Canary 图标在资源管理器 16×16 缩略下像 Electron 原子图标**——这是正常观感：金色轨道徽标在小尺寸下字母被抹掉、只剩轨道环。不是图标嵌入失败。
@@ -218,6 +258,7 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
 以下「可累积避坑」条目与本流程直接相关，排查打包问题时务必对照阅读：
 
 - 「桌面构建产物有明确的组件边界」
+- 「同步 renderer 产物时，"跳过构建"不等于"仍然同步"」
 - 「esbuild external 不会进 bundle，必须随包提供运行时 node_modules」
 - 「残留 app.asar 会优先于 resources/app 被加载」
 - 「原生 .node 必须与当前源码同一次构建」
@@ -228,6 +269,12 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
 ## 可累积避坑
 
 以下条目依据本次查阅的仓库文档和脚本记录。架构级指涉及组件边界或构建依赖关系、会影响后续设计或改动顺序的经验；机器路径、工具版本和单次构建故障不属于架构级。
+
+### 同步 renderer 产物时，"跳过构建"不等于"仍然同步"
+
+- **架构级：是。** `packages/frontend/apps/electron/scripts/generate-assets.ts` 把 `fs.move(dist → resources/web-static)` 写在 `if (!process.env.SKIP_WEB_BUILD)` 块内部。设 `SKIP_WEB_BUILD` 会连同步一起跳过，而脚本仍打印变量表并以 `exit=0` 正常退出——**退出码 0 不代表同步成功**。在这种"复制动作被条件包裹"的脚本上，不能用退出码替代对产物的实际校验。
+- 正确做法：跳过 renderer 重复构建后，用 `robocopy <renderer>\dist <electron>\resources\web-static /MIR` 手动同步，并核对两处 chunk **hash 一致**；hash 不一致即说明打的是旧包。`/MIR` 顺带清掉目标目录里的旧 chunk（robocopy 输出的 `*EXTRA File` 是删除动作，非错误）。
+- 详见「编译打包流程 → 步骤 3」。
 
 ### 桌面构建产物有明确的组件边界
 
