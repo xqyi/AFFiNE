@@ -2,15 +2,30 @@
 
 > 面向没有本次对话上下文的新会话。每次交接时更新前四节，只保留当前任务状态；“可累积避坑”保留经评估、对后续工作有指导意义的经验。记录坑项前，先标注是否属于架构级问题。
 >
-> **编译或打包前必读「编译打包流程」一节**（第 23 行起），**尤其是最前面的「⚠️ 路径解析与询问规则」**——所有绝对路径都只是记录值，失效时先问用户，不要自己闷头找。
+> **编译或打包前必读「编译打包流程」一节**，**尤其是最前面的「⚠️ 路径解析与询问规则」**——所有绝对路径都只是记录值，失效时先问用户，不要自己闷头找。
 
 ## 当前任务
 
+- 0274 分支的字体改动（CJK 回退进入文档视图 + 标题阶梯 em 化）已实现、验证、提交并推送。
+- Windows 打包已完成：免安装绿色包目录、portable zip、Squirrel Setup、NSIS Setup 四种产物齐备。
+- 无阻塞项。用户明确本次只需 push，不需要 PR。
+
 ## 已完成
+
+- **代码**（`fd7706437`）：`typography.css` 抽出 `--affine-cjk-stack`，把 `--affine-font-sans-family` 收敛为唯一 sans 定义并让 `--affine-font-family` 指向它——这是 CJK 回退能进入文档视图的关键，因为编辑器把 `--affine-font-family` 写成 slot 上的行内样式，优先级高于 `:root`；标题 h1–h6 改用 em 表达并共享 `--affine-line-height-heading`；段落块标题统一 `letter-spacing: normal`，标题内联代码由逐级阶梯收敛为 `calc(var(--affine-font-base) + 2px)`。
+- **文档**（`ffeb4e060`）：`docs/custom-0.27.4.md` 刷新到 `HEAD=fd7706437`，补录 3 个漏记提交，修正 1.2 的过期行数与 1.1 的字体描述。
+- **打包**：renderer 构建 → robocopy 同步 → build-layers → package-green → make-squirrel → make-nsis 全流程跑通，产物与验收见第 3、4 节。
+- **冒烟**：绿色包以 `--user-data-dir=<临时目录>` 启动，7 个进程存活，`main.log` 无 error/warn。
+- **推送**：`e591f4997..ffeb4e060  xqyi/0274 -> xqyi/0274`。
 
 ## 当前阻塞
 
+无。
+
 ## 下一步计划
+
+- 可选：开 PR（本次用户明确不需要）。
+- 可选：合并上游 `canary`，冲突面评估见 `docs/custom-0.27.4.md` 第一、四节。
 
 ## 编译打包流程
 
@@ -120,7 +135,7 @@ while (-not $p.HasExited) { Start-Sleep -Seconds 5 }
 ```
 
 - `runner.js` 的参数是**相对路径** `affine.ts`；传绝对路径会因被拼接到 cwd 后面而找不到文件。
-- 不要用 `yarn workspace @affine/electron-renderer build`：该脚本内部调 `affine bundle`，而 `affine` shim 在本机不可用（`ExitCode 127`）。
+- 也可以走 `yarn affine @affine/electron-renderer build`：`yarn` shim 装好后可用，`node_modules\.bin\affine.cmd` 指向 `@affine-tools/cli/bin/cli.js`。但 **2026-09-29 未复测该路径**，下文仍以 `runner.js` 为准。注意直接敲 `affine` 依然不可用（不在 PATH 上），只有经 `yarn` 才会解析到 `.bin`。
 - 成功标志：日志出现 `compiled successfully` / `compiled with N warnings`，且 `electron-renderer/dist/js/` 下生成了新 hash 的 chunk。
 
 #### 步骤 3 — 同步 web 资源到 Electron
@@ -139,7 +154,7 @@ if (!process.env.SKIP_WEB_BUILD) {
 
 所以 `SKIP_WEB_BUILD` 并不是"跳过重复构建、但仍然同步"，而是**连同步一起跳过**。设了它，脚本会打印一大段 `build with following variables {...}` 后以 `exit=0` 正常退出，`web-static` 却纹丝不动——**退出码 0 不代表同步成功**。
 
-本机又不能用 `yarn`（无 shim），于是唯一可行路径是手动同步（与 `AGENT.md` 步骤 2 一致）：
+本机 `yarn` shim 已可用（见「0. 前置」），但 2026-09-29 未复测 `yarn affine`；稳妥路径仍是手动同步（与 `AGENT.md` 步骤 2 一致）：
 
 ```powershell
 $src = "E:\AFFiNE\AFFiNE-0274\packages\frontend\apps\electron-renderer\dist"
@@ -186,9 +201,15 @@ if ($missing) { "MISSING: $($missing -join ', ')" } else { "all $($refs.Count) r
 #### 步骤 5 — 绿色打包（免安装）
 
 ```powershell
-# 必须先清空 out\canary！
-Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAction SilentlyContinue
+# 0) 先结束残留实例：关窗口 != 退出进程，残留进程会锁住 out\canary 里的 exe/dll
+Get-Process -Name AFFiNE-canary -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name AFFiNE-canary -ErrorAction SilentlyContinue   # 应返回空，再继续
 
+# 1) 清空 out\canary。递归 Remove-Item 在本机被系统策略拦截，改用 robocopy /MIR 清空：
+$empty = "$env:TEMP\affine-empty-wipe"; New-Item -ItemType Directory -Force -Path $empty | Out-Null
+robocopy $empty packages\frontend\apps\electron\out\canary /MIR /NFL /NDL /NJH /NJS /NP   # exit 0-7 均成功
+
+# 2) 打包
 & $NODE22 --import tsx packages\frontend\apps\electron\scripts\package-green.ts
 ```
 
@@ -203,32 +224,65 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
     exe icon/version resources: embedded
   ```
 
+#### 步骤 6 — 安装包（Squirrel / NSIS）
+
+两者都以步骤 5 产出的 `out\canary\AFFiNE-canary-win32-x64` 为输入，**必须在步骤 5 之后执行**。
+
+```powershell
+& $NODE22 --import tsx packages\frontend\apps\electron\scripts\make-squirrel.ts
+& $NODE22 --import tsx packages\frontend\apps\electron\scripts\make-nsis.ts
+```
+
+- **Squirrel**：内部会调用 `fixSquirrelStubIcon()` 修执行桩图标并重新生成 Setup.exe，因此 Setup.exe 的时间戳会**晚于**同目录的 `-full.nupkg`，属正常现象。
+- **`make-nsis.ts` 需要联网**下载 NSIS / 7zip 工具链（缓存在 `%LOCALAPPDATA%\electron-builder\Cache`）。2026-09-29 首次运行因 `ECONNRESET` 失败，重试即成功；失败时先确认缓存是否下全再重试。
+- 🔴 **`make-nsis.ts` 失败时仍返回 exit 0**：脚本结尾是 `make().catch(e => console.error(e))`，错误只打印、不设退出码。**判据是 `out\canary\make\nsis.windows\x64\` 里有没有 `AFFiNE-canary Setup <version>.exe`**，不是退出码。
+- 🔴 `make-nsis.ts` 中途失败会在**仓库根**留下 `AFFiNE-canary<随机串>\`（约 595 MB 的完整 app 副本）：它用 `fs.mkdtemp(appName)` 建在 CWD，而 cleanup 在 `buildForge` 之后。失败后手动清掉，别误提交。
+- ⚠️ `make-squirrel.ts` 会往绿色包目录里**注入一个 `Squirrel.exe`**（约 1.95 MB，electron-winstaller 行为，时间戳晚于 `package-green`）。它不是 `package-green` 的产物；若之后要从该目录出纯绿色包或打 zip，注意这个多出来的文件。
+
+#### 步骤 7 — 免安装 zip（可选）
+
+绿色包目录本身就是可直接运行的免安装形态；要分发时打 zip 即可。用 `tar -a`（Windows 自带 bsdtar，按扩展名判定格式）远快于 `Compress-Archive`：
+
+```powershell
+Push-Location packages\frontend\apps\electron\out\canary
+tar -a -cf AFFiNE-canary-0.27.4-portable-win32-x64.zip AFFiNE-canary-win32-x64
+Pop-Location
+# 实测 594.92 MB 目录 -> 242.09 MB zip，约 30 秒
+```
+
+> 先把 `Push-Location` 切到父目录并传**相对目录名**，zip 内才会带顶层目录，解压不会散落一地。
+
 ### 3. 产物位置
 
-🔴 **绝对路径（2026-09-28 记录，`<repo>` 随 checkout 变化）：**
+🔴 **绝对路径（2026-09-29 记录）。`<repo>` = `packages\frontend\apps\electron`，`<ver>` = 当前应用版本（本次 `0.27.4`）。一律用相对形式定位，不要照抄本机路径。**
 
-```
-<repo>\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe
-```
+| 产物             | 相对路径                                                                    | 本次实测大小 |
+| ---------------- | --------------------------------------------------------------------------- | ------------ |
+| 绿色包目录       | `<repo>\out\canary\AFFiNE-canary-win32-x64\`（入口 `AFFiNE-canary.exe`）    | 594.92 MB    |
+| 免安装 zip       | `<repo>\out\canary\AFFiNE-canary-<ver>-portable-win32-x64.zip`              | 242.09 MB    |
+| Squirrel 安装包  | `<repo>\out\canary\make\squirrel.windows\x64\AFFiNE-canary-<ver> Setup.exe` | 235.25 MB    |
+| Squirrel full 包 | 同目录 `AFFiNE-canary-<ver>-full.nupkg` + `RELEASES`                        | 234.81 MB    |
+| NSIS 安装包      | `<repo>\out\canary\make\nsis.windows\x64\AFFiNE-canary Setup <ver>.exe`     | 176.84 MB    |
 
-本次实际落在 `E:\AFFiNE\AFFiNE-0274\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe`（约 201 MB）。**不要照抄绝对路径**，用 `<repo>\...` 相对形式定位。
-
-免安装绿色包，双击即可运行，无需安装器。`out\` 下仅有 `canary`（未构建 stable）。安装包（NSIS/Squirrel）需额外执行 `make-nsis.ts` / `make-squirrel.ts`，本流程不含。
+- 绿色包双击即可运行，无需安装器；`out\` 下只有 `canary`（未构建 stable）。
+- 体积随构建浮动，仅作量级参考；用 `Get-ChildItem ... | Select-Object Name, Length, LastWriteTime` 现场取值。
 
 ### 4. 验收标准（三条硬信号 + 静态校验）
 
 **静态校验（打包后立即执行，比启动验证快）：**
 
-| 检查项     | 命令                                                                                                 | 期望                                                           |
-| ---------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 同步生效   | 比对 `<renderer>\dist\js\<chunk>.js` 与 `<app>\resources\web-static\js\<chunk>.js` 的**文件名 hash** | 两者完全相同（hash 不同 = 打的是旧包，见「常见误判」）         |
-| 改动已入包 | `Select-String <app>\resources\web-static\js\*.js -Pattern '<本次改动的特征串>'`                     | 有命中                                                         |
-| 应用版本   | `Get-Content <app>\package.json`                                                                     | `"version": "0.27.4"`                                          |
-| 烘焙版本   | `Select-String <app>\resources\web-static\js\7592.*.js -Pattern 'appVersion:"0\.27\.[0-9]+"'`        | `0.27.4`                                                       |
-| 无孤儿包   | `Get-ChildItem <app>\resources\web-static\js -Filter "*7592*"`                                       | 只有一个 chunk hash                                            |
-| 入口一致   | `Select-String <app>\resources\web-static\index.html -Pattern '7592'`                                | 指向新 hash                                                    |
-| PE 元数据  | `(Get-Item <exe>).VersionInfo`                                                                       | `ProductName/InternalName=AFFiNE-canary`、`CompanyName=AFFiNE` |
-| 图标       | 见下方命令                                                                                           | `verified: 4 icon image(s) present`                            |
+| 检查项      | 命令                                                                                                 | 期望                                                                                                                                                   |
+| ----------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 同步生效    | 比对 `<renderer>\dist\js\<chunk>.js` 与 `<app>\resources\web-static\js\<chunk>.js` 的**文件名 hash** | 两者完全相同（hash 不同 = 打的是旧包，见「常见误判」）                                                                                                 |
+| 改动已入包  | `Select-String <app>\resources\web-static\js\*.js -Pattern '<本次改动的特征串>'`                     | 有命中                                                                                                                                                 |
+| 应用版本    | `Get-Content <app>\package.json`                                                                     | `"version": "0.27.4"`                                                                                                                                  |
+| 烘焙版本    | `Select-String <app>\resources\web-static\js\7592.*.js -Pattern 'appVersion:"0\.27\.[0-9]+"'`        | `0.27.4`                                                                                                                                               |
+| 无孤儿包    | `Get-ChildItem <app>\resources\web-static\js -Filter "*7592*"`                                       | 只有一个 chunk hash                                                                                                                                    |
+| 入口一致    | `Select-String <app>\resources\web-static\index.html -Pattern '7592'`                                | 指向新 hash                                                                                                                                            |
+| PE 元数据   | `(Get-Item <exe>).VersionInfo`                                                                       | `ProductName/InternalName=AFFiNE-canary`、`CompanyName=AFFiNE`                                                                                         |
+| 图标        | 见下方命令                                                                                           | `verified: 4 icon image(s) present`                                                                                                                    |
+| 安装包图标  | 解包 `-full.nupkg`，逐张比对 `lib/net45/AFFiNE-canary_ExecutionStub.exe` 的 ICO 图像                 | 逐张命中（本次 4/4）                                                                                                                                   |
+| NSIS 元数据 | `(Get-Item "<NSIS Setup.exe>").VersionInfo`                                                          | `ProductName=AFFiNE-canary`、`FileVersion=<ver>`、`CompanyName=toeverything`（与绿包/Squirrel 的 `CompanyName=AFFiNE` 不同，属 electron-builder 行为） |
 
 > 🟢 `<app>` = `<repo>\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\resources\app`
 > 🟢 `<exe>` = `<repo>\packages\frontend\apps\electron\out\canary\AFFiNE-canary-win32-x64\AFFiNE-canary.exe`
@@ -259,6 +313,9 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
 - **Windows 任务栏图标只认 exe 内嵌 PE 资源**。rcedit 必须在打包时执行；绿色包已内置。若想换成正式版黑色菱形图标，把 `package-green.ts` 中 `buildType === 'stable' ? 'icon.ico' : icon_${buildType}.ico` 改为固定 `icon.ico`（行号会随文件改动漂移，用 `Select-String -Pattern "iconName"` 定位，**不要照抄行号 237**）。
 - **Canary 图标在资源管理器 16×16 缩略下像 Electron 原子图标**——这是正常观感：金色轨道徽标在小尺寸下字母被抹掉、只剩轨道环。不是图标嵌入失败。
 - 🟢 `.native-build.log` / `.renderer-build.log` 等是临时日志，位于**仓库根**且未被 git 跟踪，可随手删除；用完应清理以免污染工作区。
+- **`make-nsis.ts` 失败也返回 exit 0**——见「可累积避坑 → 打包脚本用 catch 吞掉错误码」。判据是 `out\canary\make\nsis.windows\x64\` 里有没有 Setup.exe，不是退出码。
+- **NSIS 产物的 `CompanyName` 是 `toeverything`、`FileVersion` 是应用版本**，与绿色包/Squirrel 的 `CompanyName=AFFiNE` 不一致。这是 electron-builder 按 `package.json` 元数据写入的结果，不是打包缺陷。
+- **绿色包目录里多出一个 `Squirrel.exe`（约 1.95 MB）**——那是打 Squirrel 包时 electron-winstaller 注入的，不属于 `package-green` 的产物。
 
 ### 6. 与本流程配套的避坑条目
 
@@ -272,6 +329,11 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
 - 「Windows 任务栏图标只认 exe 内嵌资源，绿色包重打包会把它覆盖掉」
 - 「单实例锁会让"双击没反应"，冒烟测试用独立 user-data-dir」
 - 「本机路径和应用版本不要固化到可复用命令」
+- 「关闭窗口不等于退出进程，残留实例会锁住 out 目录」
+- 「打包脚本用 catch 吞掉错误码，退出码 0 不代表打包成功」
+- 「NSIS 打包失败会在仓库根留下完整 app 副本」
+- 「Squirrel 打包会往绿色包目录注入 Squirrel.exe」
+- 「免安装 zip 用 tar -a 生成，不要用 Compress-Archive」
 
 ## 可累积避坑
 
@@ -359,3 +421,28 @@ Remove-Item -Recurse -Force packages\frontend\apps\electron\out\canary -ErrorAct
   脚本自动挑 `rcedit-full`、写入图标与 4 个 version string，并逐张校验 ico 的每张图已落进 PE（`--verify-only` 只校验不修改）。AFFiNE-0274 的 `package-green` 已内置该步骤，末尾打印 `exe icon/version resources: embedded`。
 - 两个易混点：① 这一步必须在 `make` 之前完成，否则 Setup.exe/nupkg 里的 exe 仍是 Electron 图标；② 目标 exe 被运行中的实例占用时 rcedit 报 `Fatal error: Unable to commit changes`（locks），先退出应用再嵌，`--verify-only` 不受影响。
 - 验收：`AFFiNE-canary.exe` 由 210896896 变为 210913280 字节（+16KB），`VersionInfo` 变为 `ProductName/InternalName=AFFiNE-canary`、`CompanyName=AFFiNE`，脚本输出 `verified: 4 icon image(s) present`。注意 Squirrel 安装场景还要额外修执行桩（见「Squirrel 执行桩不继承 app 图标」一条），绿色包不需要。
+
+### 关闭窗口不等于退出进程，残留实例会锁住 out 目录
+
+- **架构级：否。** Electron 应用关掉窗口后进程可能继续存活（托盘、helper、renderer 都算）。2026-09-29 实测：用户已关闭窗口，仍有 7 个 `AFFiNE-canary` 进程存活，导致清空 `out\canary` 时报 `ERROR 5 (Access is denied)` 与 `ERROR 32 (being used by another process)`——被占用的是 `.exe`、`.dll` 与 `v8_context_snapshot.bin`。
+- 重新打包前先结束实例并确认归零：`Get-Process -Name AFFiNE-canary -ErrorAction SilentlyContinue | Stop-Process -Force`，再 `Get-Process -Name AFFiNE-canary` 应返回空。
+
+### 打包脚本用 catch 吞掉错误码，退出码 0 不代表打包成功
+
+- **架构级：否。** `make-squirrel.ts` 与 `make-nsis.ts` 都以 `make().catch(e => console.error(e))` 结尾：错误只打到 stderr，进程仍以 0 退出。2026-09-29 实测 `make-nsis.ts` 因 `ECONNRESET` 下载工具链失败，`MAKE_NSIS_EXIT=0`，而 `out\canary\make\nsis.windows\x64\` 里没有任何产物。
+- 凡"脚本尾部捕获异常"的打包脚本，验收一律以**产物是否存在**为准，不看退出码。这与「同步 renderer 产物时，跳过构建不等于仍然同步」是同一类问题。
+
+### NSIS 打包失败会在仓库根留下完整 app 副本
+
+- **架构级：否。** `make-nsis.ts` 用 `fs.mkdtemp(appName)` 在 CWD（即仓库根）建临时目录、把整个绿色包 `fs.copy` 进去、最后 `fs.remove(tmpPath)`。中途失败就跳过 cleanup，留下 `AFFiNE-canary<随机串>\`（本次 594.92 MB / 2575 项）。
+- 它会出现在 `git status` 的未跟踪列表里，别误提交；清空用 `robocopy <空目录> <目标> /MIR`（递归 `Remove-Item` 在本机被系统策略拦截）。
+
+### Squirrel 打包会往绿色包目录注入 Squirrel.exe
+
+- **架构级：否。** `make-squirrel.ts` 经 electron-winstaller 组包时，会把 `Squirrel.exe`（约 1.95 MB）写进 `out\<buildType>\<productName>-<platform>-<arch>\`。它的时间戳晚于 `package-green` 的产物，不属于绿色包本身。
+- 先打绿色包、再打 Squirrel 时最容易忽略；若要交付纯绿色包或据该目录打 zip，需先决定是否剔除它。
+
+### 免安装 zip 用 tar -a 生成，不要用 Compress-Archive
+
+- **架构级：否。** `tar -a -cf <name>.zip <dir>`（Windows 自带 bsdtar，按扩展名判定格式）打 595 MB 目录约 30 秒；`Compress-Archive` 在同量级下慢一个数量级。
+- 先把 `Push-Location` 切到父目录并传**相对目录名**，zip 内才会带顶层目录，解压不会散落一地。
