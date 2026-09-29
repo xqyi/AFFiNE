@@ -2,21 +2,21 @@
 
 > 本文档罗列本分支相对上游共同祖先的全部改动，用于合并上游（merge/rebase）时评估冲突与保留策略。
 >
-> - **本分支**：`xqyi/0274`（远程 `origin/xqyi/0274`，HEAD = `5d60353a9`）
+> - **本分支**：`xqyi/0274`（远程 `origin/xqyi/0274`，HEAD = `fd7706437`）
 > - **上游基线**：`b4c8548c0`（`feat(server): normalize timestamp`，版本 `0.27.0`）——`HEAD` 与 `origin/canary` 的 merge-base
-> - **生成时间**：2026-09-28
+> - **生成时间**：2026-09-29
 > - **生成命令**：`git diff b4c8548c0..HEAD`
 
 ## 概览
 
 | 指标                   | 值              |
 | ---------------------- | --------------- |
-| 领先 commit 数         | 20              |
+| 领先 commit 数         | 24              |
 | 落后上游 commit 数     | 49              |
-| 变更文件总数           | 153             |
-| 代码行                 | +3137 / −230    |
+| 变更文件总数           | 154             |
+| 代码行                 | +3467 / −273    |
 | 其中 `package.json`    | 123（纯版本号） |
-| 非 `package.json` 文件 | 30              |
+| 非 `package.json` 文件 | 31              |
 
 ### 合并冲突面预判
 
@@ -42,34 +42,34 @@ b4c8548c0  "version": "0.27.0"
 
 引入统一的 CSS 覆盖层，把字体、标题层级、行高改为可配置变量。
 
-| 文件                                                              | 变更           | 说明                                                                                                                                                 |
-| ----------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/frontend/component/src/theme/typography.css`            | **新增** 40 行 | `:root` 覆盖层：字体栈（补 CJK 回退）、标题 h1–h6 缩放（30/24/20/18/16/15px）、`--affine-font-title: 30px`、`--affine-line-height: calc(1em + 10px)` |
-| `packages/frontend/component/src/theme/index.ts`                  | +1 行          | 引入 `./typography.css`                                                                                                                              |
-| `blocksuite/affine/fragments/doc-title/src/doc-title.ts`          | 改 2 行        | 硬编码 `40px/50px` → `var(--affine-font-title, 30px)` / `var(--affine-font-title-line-height, 40px)`                                                 |
-| `blocksuite/affine/blocks/code/src/highlight/affine-code-unit.ts` | 删 1 行        | 移除内联代码 `font-size: calc(var(--affine-font-base) - 3px)` 覆盖                                                                                   |
-| `blocksuite/affine/blocks/list/src/styles.ts`                     | 删 1 行        | 移除列表内联代码字号覆盖                                                                                                                             |
-| `blocksuite/affine/blocks/paragraph/src/styles.ts`                | 删 1 行        | 移除段落内联代码字号覆盖                                                                                                                             |
+| 文件                                                              | 变更           | 说明                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/frontend/component/src/theme/typography.css`            | **新增** 54 行 | `:root` 覆盖层：单一 sans 字体栈 `--affine-font-sans-family`（Inter 优先，追加共享的 `--affine-cjk-stack`）、标题 h1–h6 改用 em 表达（16px 基准下 30/24/20/18/17/16px）、`--affine-font-title: 30px`、`--affine-line-height: calc(1em + 10px)`、`--affine-line-height-heading: calc(1em + 6px)` |
+| `packages/frontend/component/src/theme/index.ts`                  | +1 行          | 引入 `./typography.css`                                                                                                                                                                                                                                                                         |
+| `blocksuite/affine/fragments/doc-title/src/doc-title.ts`          | 改 2 行        | 硬编码 `40px/50px` → `var(--affine-font-title, 30px)` / `var(--affine-font-title-line-height, 40px)`                                                                                                                                                                                            |
+| `blocksuite/affine/blocks/code/src/highlight/affine-code-unit.ts` | 删 1 行        | 移除内联代码 `font-size: calc(var(--affine-font-base) - 3px)` 覆盖                                                                                                                                                                                                                              |
+| `blocksuite/affine/blocks/list/src/styles.ts`                     | 删 1 行        | 移除列表内联代码字号覆盖                                                                                                                                                                                                                                                                        |
+| `blocksuite/affine/blocks/paragraph/src/styles.ts`                | +22 / −38      | 标题六个层级改用 `--affine-line-height-heading` 与 `letter-spacing: normal`；标题内联代码统一为 `calc(var(--affine-font-base) + 2px)`                                                                                                                                                           |
 
-> 设计意图：内联代码不再自带缩小字号，改为继承正文字号（`bd64770fa` / `a2ab1b64b` / `c1246b336` / `568c6e273` / `a543d0d8e`）。
-> 注释中引用的 spec 文件 `docs/superpowers/specs/2026-09-25-yuque-doc-typography-design.md` 已被 `f4e9087f9` 移除，属**悬空引用**。
+> 设计意图：覆盖层本身来自 `a543d0d8e`（新增 `:root` 变量层）、`c1246b336`（改为从 `index.ts` 引入）、`568c6e273`（标题字号改由变量驱动）；内联代码不再自带缩小字号（`bd64770fa` / `a2ab1b64b`）；`fd7706437` 起，标题字号改为跟随 `--affine-font-base` 的 em 表达，CJK 回退链真正进入文档视图，六个标题层级的内联代码统一为 `calc(var(--affine-font-base) + 2px)`。
+> 悬空引用已清理：原注释指向的 spec 文件已随 `f4e9087f9` 删除，`typography.css` 中的该行注释已移除。
 
 ### 1.2 大纲（Outline）折叠/缩进重构
 
-改动量最大的一块：+911 / −88 行，新增树工具与测试。
+改动量最大的一块：+936 / −94 行，新增树工具与测试。
 
-| 文件                                                                          | 变更            | 说明                                                                                                                         |
-| ----------------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `blocksuite/affine/fragments/outline/src/utils/outline-tree.ts`               | **新增** 195 行 | 核心数据结构 `OutlineRow { block, collapsed, hasChildren }`；`isHeadingBlock` 鸭子类型判断（避免单测环境 `instanceof` 失效） |
-| `blocksuite/affine/fragments/outline/src/__tests__/outline-tree.unit.spec.ts` | **新增** 201 行 | 树遍历单元测试                                                                                                               |
-| `blocksuite/affine/fragments/outline/vitest.config.ts`                        | **新增** 36 行  | 该 fragment 独立 vitest 配置                                                                                                 |
-| `blocksuite/affine/fragments/outline/src/outline-viewer.ts`                   | +166            | 滚动指示条与折叠状态解耦；箭头随文本缩进；叶子缩进 +1 个中文字符；H1 默认展开                                                |
-| `blocksuite/affine/fragments/outline/src/card/outline-card.ts`                | +57             | 折叠按钮交互                                                                                                                 |
-| `blocksuite/affine/fragments/outline/src/card/outline-card.css.ts`            | +35             | 新增 `outlineRow` / `toggle` 样式                                                                                            |
-| `blocksuite/affine/fragments/outline/src/card/outline-preview.ts`             | +68             | 预览渲染                                                                                                                     |
-| `blocksuite/affine/fragments/outline/src/card/outline-preview.css.ts`         | +61             | 预览样式                                                                                                                     |
-| `tests/affine-local/e2e/.../outline-panel.spec.ts`                            | +76             | e2e 新增用例                                                                                                                 |
-| `tests/affine-local/e2e/.../outline-viewer.spec.ts`                           | +97             | 修复默认折叠行为的既有 spec                                                                                                  |
+| 文件                                                                          | 变更            | 说明                                                                                                                                                          |
+| ----------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blocksuite/affine/fragments/outline/src/utils/outline-tree.ts`               | **新增** 195 行 | 核心数据结构 `OutlineRow { block, collapsed, hasChildren }`；`isHeadingBlock` 鸭子类型判断（避免单测环境 `instanceof` 失效）                                  |
+| `blocksuite/affine/fragments/outline/src/__tests__/outline-tree.unit.spec.ts` | **新增** 201 行 | 树遍历单元测试                                                                                                                                                |
+| `blocksuite/affine/fragments/outline/vitest.config.ts`                        | **新增** 36 行  | 该 fragment 独立 vitest 配置                                                                                                                                  |
+| `blocksuite/affine/fragments/outline/src/outline-viewer.ts`                   | +169            | 滚动指示条与折叠状态解耦；箭头随文本缩进；叶子缩进 +1 个中文字符；H1 默认展开；箭头改为实心三角并让按钮铺满 22px 行盒居中；去掉卡片 hover 底色（`c5d25f85d`） |
+| `blocksuite/affine/fragments/outline/src/card/outline-card.ts`                | +57             | 折叠按钮交互                                                                                                                                                  |
+| `blocksuite/affine/fragments/outline/src/card/outline-card.css.ts`            | +53             | 新增 `outlineRow` / `toggle` 样式                                                                                                                             |
+| `blocksuite/affine/fragments/outline/src/card/outline-preview.ts`             | +78             | 预览渲染                                                                                                                                                      |
+| `blocksuite/affine/fragments/outline/src/card/outline-preview.css.ts`         | +61             | 预览样式                                                                                                                                                      |
+| `tests/affine-local/e2e/.../outline-panel.spec.ts`                            | +76             | e2e 新增用例                                                                                                                                                  |
+| `tests/affine-local/e2e/.../outline-viewer.spec.ts`                           | +97             | 修复默认折叠行为的既有 spec                                                                                                                                   |
 
 > ⚠️ **合并高风险区**：这是本分支唯一有实质业务逻辑的改动区。功能点分散在 8 个文件，若上游同期改动 outline 相关代码，需人工逐文件合并。
 
@@ -172,30 +172,34 @@ b4c8548c0  "version": "0.27.0"
 
 ---
 
-## 五、Commit 明细（20 个，按时间倒序）
+## 五、Commit 明细（24 个，按时间倒序）
 
-| SHA         | 日期  | 说明                                                                                        |
-| ----------- | ----- | ------------------------------------------------------------------------------------------- |
-| `5d60353a9` | 09-28 | chore(release): unify all workspace versions to 0.27.4 and add green packaging scripts      |
-| `1c05be17b` | 09-27 | fix(deps): align @vanilla-extract/vite-plugin in outline fragment to ^5.0.0                 |
-| `c3184508b` | 09-27 | chore(release): set electron app version to 0.27.4 to match official v0.27.4 tag            |
-| `f4e9087f9` | 09-27 | chore(port): drop superpowers spec/plan bundled in the outline-viewer commit                |
-| `468cab4ff` | 09-27 | docs(agent): add missing V8 snapshot copy step to manual packaging (blank window fix)       |
-| `506125dd0` | 09-26 | docs(agent): restore step 4.5 rcedit icon embed + stub icon verification                    |
-| `22d7a5fbb` | 09-26 | fix(build): embed app icon into Squirrel execution stub                                     |
-| `bd64770fa` | 09-26 | style(list,paragraph): drop inline code font-size override (yuque alignment)                |
-| `a2ab1b64b` | 09-26 | style(code): inline code inherits body font-size (yuque alignment)                          |
-| `c1246b336` | 09-26 | fix(theme): import typography.css from index.ts instead of theme.css.ts                     |
-| `568c6e273` | 09-26 | refactor(doc-title): drive title size/line-height from --affine-font-title vars             |
-| `a543d0d8e` | 09-26 | feat(theme): add yuque-style typography override layer                                      |
-| `b19b61874` | 09-25 | docs: step 4.5 now uses full rcedit                                                         |
-| `e4773e610` | 09-25 | docs: add step 4.5 (rcedit icon embed) and patch productName + icons                        |
-| `3bccf2e85` | 09-25 | docs: add AGENT.md packaging guide, unignore it                                             |
-| `9f44f66b3` | 09-25 | feat(sidebar): rename Collections to '动态' and reorder nav sections                        |
-| `1e8f7f352` | 09-25 | feat(outline): follow arrow with text indent, leaf indent +1 CJK char, expand H1 by default |
-| `f64dc1392` | 09-23 | fix(outline): decouple scroll-indicator rail from collapse state                            |
-| `2411fef4b` | 09-23 | test(outline): fix e2e specs and tree traversal for collapsed-by-default behaviour          |
-| `0ed930613` | 09-23 | feat(outline): increase heading indent to 1em and add collapse/expand                       |
+| SHA         | 日期  | 说明                                                                                                |
+| ----------- | ----- | --------------------------------------------------------------------------------------------------- |
+| `fd7706437` | 09-29 | style(theme,paragraph): make the CJK fallback reach the doc view, scale headings with the base size |
+| `e591f4997` | 09-28 | docs: document the machine-local yarn shim                                                          |
+| `c5d25f85d` | 09-28 | feat(outline): solid disclosure arrow, centre it on the text, drop card hover background            |
+| `c3c94d046` | 09-28 | docs: document custom changes on xqyi/0274 vs upstream base b4c8548c0                               |
+| `5d60353a9` | 09-28 | chore(release): unify all workspace versions to 0.27.4 and add green packaging scripts              |
+| `1c05be17b` | 09-27 | fix(deps): align @vanilla-extract/vite-plugin in outline fragment to ^5.0.0                         |
+| `c3184508b` | 09-27 | chore(release): set electron app version to 0.27.4 to match official v0.27.4 tag                    |
+| `f4e9087f9` | 09-27 | chore(port): drop superpowers spec/plan bundled in the outline-viewer commit                        |
+| `468cab4ff` | 09-27 | docs(agent): add missing V8 snapshot copy step to manual packaging (blank window fix)               |
+| `506125dd0` | 09-26 | docs(agent): restore step 4.5 rcedit icon embed + stub icon verification                            |
+| `22d7a5fbb` | 09-26 | fix(build): embed app icon into Squirrel execution stub                                             |
+| `bd64770fa` | 09-26 | style(list,paragraph): drop inline code font-size override (yuque alignment)                        |
+| `a2ab1b64b` | 09-26 | style(code): inline code inherits body font-size (yuque alignment)                                  |
+| `c1246b336` | 09-26 | fix(theme): import typography.css from index.ts instead of theme.css.ts                             |
+| `568c6e273` | 09-26 | refactor(doc-title): drive title size/line-height from --affine-font-title vars                     |
+| `a543d0d8e` | 09-26 | feat(theme): add yuque-style typography override layer                                              |
+| `b19b61874` | 09-25 | docs: step 4.5 now uses full rcedit                                                                 |
+| `e4773e610` | 09-25 | docs: add step 4.5 (rcedit icon embed) and patch productName + icons                                |
+| `3bccf2e85` | 09-25 | docs: add AGENT.md packaging guide, unignore it                                                     |
+| `9f44f66b3` | 09-25 | feat(sidebar): rename Collections to '动态' and reorder nav sections                                |
+| `1e8f7f352` | 09-25 | feat(outline): follow arrow with text indent, leaf indent +1 CJK char, expand H1 by default         |
+| `f64dc1392` | 09-23 | fix(outline): decouple scroll-indicator rail from collapse state                                    |
+| `2411fef4b` | 09-23 | test(outline): fix e2e specs and tree traversal for collapsed-by-default behaviour                  |
+| `0ed930613` | 09-23 | feat(outline): increase heading indent to 1em and add collapse/expand                               |
 
 ---
 
@@ -211,5 +215,4 @@ b4c8548c0  "version": "0.27.0"
 
 ### 已知遗留问题
 
-1. **悬空文档引用**：`typography.css` 注释引用的 `docs/superpowers/specs/2026-09-25-yuque-doc-typography-design.md` 已被 `f4e9087f9` 删除。
-2. **工作区未提交**：`packages/frontend/native/index.{js,d.ts}` 存在 NAPI-RS 重新生成导致的 `eslint-disable` → `oxlint-disable` 漂移，与本分支功能无关。
+1. **原生模块重建后的无关漂移**（当前工作区无此项）：`packages/frontend/native/index.{js,d.ts}` 存在 NAPI-RS 重新生成导致的 `eslint-disable` → `oxlint-disable` 漂移，与本分支功能无关。
