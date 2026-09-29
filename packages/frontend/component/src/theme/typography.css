@@ -5,28 +5,39 @@
  * @toeverything/theme (those variables resolve at the same scope), while
  * remaining lower priority than user overrides on document.documentElement
  * (Settings -> font size / custom font), which is required behavior.
- *
- * See docs/superpowers/specs/2026-09-25-yuque-doc-typography-design.md
  */
 :root {
-  /* font families: keep Inter/Source, add CJK fallback chain */
-  --affine-font-family:
-    'Inter', 'Source Sans 3', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans', apple-system,
+  /* CJK fallback chain, shared by the body and the sans stack so that the
+     two font chains can never drift apart. */
+  --affine-cjk-stack:
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    'Noto Sans';
+
+  /* Latin stays Latin-first: Inter leads, the CJK chain is appended for CJK
+     codepoints only. This is also the terminal of the editor font setting
+     chain (blocksuite-editor.tsx writes --affine-font-family as an inline
+     style resolving to var(--affine-font-sans-family)), so declaring the
+     fallback here is what actually makes it reach the document view. */
+  --affine-font-sans-family:
+    'Inter', 'Source Sans 3', var(--affine-cjk-stack), Poppins, apple-system,
     BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif,
     'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+  --affine-font-family: var(--affine-font-sans-family);
 
   --affine-font-code-family:
     'Source Code Pro', 'IBM Plex Mono', 'Space Mono', Consolas, Menlo, Monaco,
     'Noto Sans Mono CJK SC', 'Noto Sans Mono', 'Courier New', monospace;
 
-  /* heading scale: compress to Yuque rhythm */
-  --affine-font-h-1: 30px;
-  --affine-font-h-2: 24px;
-  --affine-font-h-3: 20px;
-  --affine-font-h-4: 18px;
-  --affine-font-h-5: 16px;
-  --affine-font-h-6: 15px;
+  /* heading scale: relative to --affine-font-base so headings follow the
+     editor font-size setting. At the 16px runtime base these resolve to
+     30 / 24 / 20 / 18 / 17 / 16px. */
+  --affine-font-h-1: 1.875em;
+  --affine-font-h-2: 1.5em;
+  --affine-font-h-3: 1.25em;
+  --affine-font-h-4: 1.125em;
+  --affine-font-h-5: 1.0625em;
+  --affine-font-h-6: 1em;
 
   /* body base unchanged */
   --affine-font-base: 15px;
@@ -37,4 +48,7 @@
 
   /* looser reading line-height for CJK comfort */
   --affine-line-height: calc(1em + 10px);
+
+  /* headings run tighter than body copy */
+  --affine-line-height-heading: calc(1em + 6px);
 }

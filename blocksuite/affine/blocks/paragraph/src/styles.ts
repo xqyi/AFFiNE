@@ -28,83 +28,68 @@ export const paragraphBlockStyles = css`
   .h1 {
     font-size: var(--affine-font-h-1);
     font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: calc(1em + 8px);
+    letter-spacing: normal;
+    line-height: var(--affine-line-height-heading);
     margin-top: 18px;
     margin-bottom: 10px;
-  }
-
-  .h1 code {
-    font-size: calc(var(--affine-font-base) + 10px);
-    padding: 0px 4px;
   }
 
   .h2 {
     font-size: var(--affine-font-h-2);
     font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: calc(1em + 10px);
+    letter-spacing: normal;
+    line-height: var(--affine-line-height-heading);
     margin-top: 14px;
     margin-bottom: 10px;
-  }
-
-  .h2 code {
-    font-size: calc(var(--affine-font-base) + 8px);
-    padding: 0px 4px;
   }
 
   .h3 {
     font-size: var(--affine-font-h-3);
     font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: calc(1em + 8px);
+    letter-spacing: normal;
+    line-height: var(--affine-line-height-heading);
     margin-top: 12px;
     margin-bottom: 10px;
-  }
-
-  .h3 code {
-    font-size: calc(var(--affine-font-base) + 6px);
-    padding: 0px 4px;
   }
 
   .h4 {
     font-size: var(--affine-font-h-4);
     font-weight: 600;
-    letter-spacing: -0.015em;
-    line-height: calc(1em + 8px);
+    letter-spacing: normal;
+    line-height: var(--affine-line-height-heading);
     margin-top: 12px;
     margin-bottom: 10px;
-  }
-  .h4 code {
-    font-size: calc(var(--affine-font-base) + 4px);
-    padding: 0px 4px;
   }
 
   .h5 {
     font-size: var(--affine-font-h-5);
     font-weight: 600;
-    letter-spacing: -0.015em;
-    line-height: calc(1em + 8px);
+    letter-spacing: normal;
+    line-height: var(--affine-line-height-heading);
     margin-top: 12px;
     margin-bottom: 10px;
-  }
-  .h5 code {
-    font-size: calc(var(--affine-font-base) + 2px);
-    padding: 0px 4px;
   }
 
   .h6 {
     font-size: var(--affine-font-h-6);
     font-weight: 600;
-    letter-spacing: -0.015em;
-    line-height: calc(1em + 8px);
+    letter-spacing: normal;
+    line-height: var(--affine-line-height-heading);
     margin-top: 12px;
     margin-bottom: 10px;
   }
 
+  /* Inline code keeps one size across every heading level. The old ladder
+     scaled it per level, which made code in an H1 jump to 25px in a
+     monospace face while code in an H6 shrank below body copy. */
+  .h1 code,
+  .h2 code,
+  .h3 code,
+  .h4 code,
+  .h5 code,
   .h6 code {
-    font-size: var(--affine-font-base);
-    padding: 0px 4px 2px;
+    font-size: calc(var(--affine-font-base) + 2px);
+    padding: 0px 4px;
   }
 
   .quote {
