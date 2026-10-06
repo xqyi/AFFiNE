@@ -119,6 +119,35 @@ test.describe('Global code block line numbers setting', () => {
     await expect(lineNumber).toBeHidden();
   });
 
+  test('per-block toggle works when clicking the switch itself', async ({
+    page,
+  }) => {
+    await initCodeBlockByOneStep(page);
+
+    const lineNumber = page.locator('affine-code .line-number');
+    // Global is ON by default
+    await expect(lineNumber).toBeVisible();
+
+    // Regression: clicking the toggle pill must act once, not twice. The
+    // pill's <label> forwards a synthetic click to its checkbox, which used
+    // to bubble up to the menu row and cancel the toggle out.
+    const { cancelLineNumberButton } = await openCodeBlockMoreMenu(page);
+    await cancelLineNumberButton.locator('toggle-switch').click();
+
+    await expect(lineNumber).toBeHidden();
+    // The row label follows the new state
+    const lineNumberButton = page
+      .locator('.more-popup-menu')
+      .getByRole('button', { name: 'Line number' });
+    await expect(lineNumberButton).toBeVisible();
+    // The pill itself must reflect the new state instead of staying "on".
+    const toggle = lineNumberButton.locator('toggle-switch');
+    await expect(toggle.locator('label')).not.toHaveClass(/on/);
+    await expect(toggle.locator('input')).not.toBeChecked();
+
+    await page.mouse.click(300, 300);
+  });
+
   test('global setting is reflected on newly created code blocks', async ({
     page,
   }) => {

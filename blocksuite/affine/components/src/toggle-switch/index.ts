@@ -63,11 +63,14 @@ export class ToggleSwitch extends LitElement {
 
   override render() {
     return html`
-      <label class=${this.on ? 'on' : ''}>
+      <label
+        class=${this.on ? 'on' : ''}
+        @click=${(e: MouseEvent) => e.stopPropagation()}
+      >
         <input
           type="checkbox"
           class="switch"
-          ?checked=${this.on}
+          .checked=${this.on}
           @change=${this._toggleSwitch}
         />
       </label>

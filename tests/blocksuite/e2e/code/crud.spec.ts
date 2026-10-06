@@ -409,6 +409,44 @@ test('toggle code block line number can work in the same more menu', async ({
   await expect(lineNumber).toBeVisible();
 });
 
+test('clicking the line number switch stays in sync with the block state', async ({
+  page,
+}) => {
+  await enterPlaygroundRoom(page);
+  await initEmptyCodeBlockState(page);
+  await focusRichText(page);
+
+  const lineNumber = page.locator('affine-code .line-number');
+  await expect(lineNumber).toBeVisible();
+
+  const codeBlockController = getCodeBlock(page);
+  await codeBlockController.codeBlock.hover();
+  const moreMenu = await codeBlockController.openMore();
+
+  await expect(
+    moreMenu.cancelLineNumberButton.locator('toggle-switch label')
+  ).toHaveClass(/on/);
+
+  // Clicking the switch pill itself must toggle the block state exactly once
+  // and keep the switch in sync with it.
+  await moreMenu.cancelLineNumberButton.locator('toggle-switch').click();
+
+  await expect(lineNumber).toBeHidden();
+  await expect(moreMenu.lineNumberButton).toBeVisible();
+  const offToggle = moreMenu.lineNumberButton.locator('toggle-switch');
+  await expect(offToggle.locator('label')).not.toHaveClass(/on/);
+  await expect(offToggle.locator('input')).not.toBeChecked();
+
+  // Clicking the row still toggles the state and the switch follows it.
+  await moreMenu.lineNumberButton.click();
+
+  await expect(lineNumber).toBeVisible();
+  await expect(moreMenu.cancelLineNumberButton).toBeVisible();
+  const onToggle = moreMenu.cancelLineNumberButton.locator('toggle-switch');
+  await expect(onToggle.locator('label')).toHaveClass(/on/);
+  await expect(onToggle.locator('input')).toBeChecked();
+});
+
 test('code block toolbar widget can appear and disappear during mousemove', async ({
   page,
 }) => {
