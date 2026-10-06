@@ -6,17 +6,20 @@
 
 ## 当前任务
 
-- 0274 分支的字体改动（CJK 回退进入文档视图 + 标题阶梯 em 化）已实现、验证、提交并推送。
-- Windows 打包已完成：免安装绿色包目录、portable zip、Squirrel Setup、NSIS Setup 四种产物齐备。
-- 无阻塞项。用户明确本次只需 push，不需要 PR。
+- 修复代码块工具栏 Plain Text 里「Cancel line number / Line number」滑块：点击滑块后行号已隐藏，但滑块状态与实际不符（仍显示为开）。已实现、验证、提交（`3ca06c62f`）、重新打包并推送。
+- 四种 Windows 产物已用本次修复重新生成（见第 3、4 节）。
+- 无阻塞项。
 
 ## 已完成
 
-- **代码**（`fd7706437`）：`typography.css` 抽出 `--affine-cjk-stack`，把 `--affine-font-sans-family` 收敛为唯一 sans 定义并让 `--affine-font-family` 指向它——这是 CJK 回退能进入文档视图的关键，因为编辑器把 `--affine-font-family` 写成 slot 上的行内样式，优先级高于 `:root`；标题 h1–h6 改用 em 表达并共享 `--affine-line-height-heading`；段落块标题统一 `letter-spacing: normal`，标题内联代码由逐级阶梯收敛为 `calc(var(--affine-font-base) + 2px)`。
-- **文档**（`ffeb4e060`）：`docs/custom-0.27.4.md` 刷新到 `HEAD=fd7706437`，补录 3 个漏记提交，修正 1.2 的过期行数与 1.1 的字体描述。
-- **打包**：renderer 构建 → robocopy 同步 → build-layers → package-green → make-squirrel → make-nsis 全流程跑通，产物与验收见第 3、4 节。
+- **代码**（`3ca06c62f`，4 个文件）：
+  - `blocksuite/affine/components/src/toggle-switch/index.ts`：`<label>` 上加 `stopPropagation()`，点击滑块不再冒泡到外层可点击行；`?checked`（属性绑定）改为 `.checked`（属性绑定）。
+  - `blocksuite/affine/blocks/code/src/code-toolbar/config.ts`：wrap 与 line-number 两行补 `.onChange` 受控写入（`setWrap(on)` / `lineNumber: on`）。
+  - 回归测试：`tests/blocksuite/e2e/code/crud.spec.ts` 新增 `clicking the line number switch stays in sync with the block state`；`tests/affine-local/e2e/blocksuite/code/line-numbers.spec.ts` 的 `per-block toggle works when clicking the switch itself` 增加滑块视觉状态断言。
+- **验证**：blocksuite `crud.spec.ts` 28 项 27 过，唯一失败 `duplicate code block` 为既有失败（stash 本次源码改动后仍失败，与本改动无关）；affine-local `line-numbers.spec.ts` 9 项全过；两个文件 `oxfmt --check` / `oxlint --deny-warnings` 干净。
+- **打包**：renderer 构建 → robocopy 同步 → build-layers → package-green → make-squirrel → make-nsis → portable zip 全流程跑通。同步后 chunk 为 `5503.6acc4ec4.js`（上一版 `5503.1473168a.js`）；产物内静态校验到本次改动（`.onChange="${t=>e.setWrap(t)}"`、`@click=${e=>e.stopPropagation()}`、`.checked=${this.on}`）。
 - **冒烟**：绿色包以 `--user-data-dir=<临时目录>` 启动，7 个进程存活，`main.log` 无 error/warn。
-- **推送**：`e591f4997..ffeb4e060  xqyi/0274 -> xqyi/0274`。
+- **提交/推送**：代码修复 `3ca06c62f`（含 2 个测试文件）；本次交接文档随后单独提交，一同推送到 `origin/xqyi/0274`。用户本次只要求提交推送，不需要 PR。
 
 ## 当前阻塞
 
@@ -24,7 +27,7 @@
 
 ## 下一步计划
 
-- 可选：开 PR（本次用户明确不需要）。
+- 可选：开 PR（用户本次只要求提交并推送）。
 - 可选：合并上游 `canary`，冲突面评估见 `docs/custom-0.27.4.md` 第一、四节。
 
 ## 编译打包流程
@@ -446,3 +449,13 @@ Pop-Location
 
 - **架构级：否。** `tar -a -cf <name>.zip <dir>`（Windows 自带 bsdtar，按扩展名判定格式）打 595 MB 目录约 30 秒；`Compress-Archive` 在同量级下慢一个数量级。
 - 先把 `Push-Location` 切到父目录并传**相对目录名**，zip 内才会带顶层目录，解压不会散落一地。
+
+### 交互组件嵌在可点击行里时，一次点击会写两处状态
+
+- **架构级：是。** `toggle-switch`（`blocksuite/affine/components/src/toggle-switch/index.ts`）的 `<label>` 被点击时，浏览器会额外向内部 checkbox 转发一次合成 click。若它嵌在自带 `@click` 的行内（代码块工具栏 Plain Text 的 wrap / line-number 行），一次点击会同时触发「行处理器改模型」与「checkbox 的 change 自翻转内部 `on`」。外层行又没传 `onChange` 时，滑块内部状态与模型永久失同步——本次症状就是行号已隐藏、滑块仍显示为开（更早的版本则是两次行处理器互相抵消，表现为点击无效）。
+- 修复的关键不是让某一侧"少写一次"，而是让两侧分工明确：滑块 `<label>` 上 `stopPropagation()`（点击滑块不再触发行的 action），使用方通过 `.onChange` 受控写入。改全局组件前先核对消费方：菜单类消费方（outline / frames / navigator、`context-menu/button.ts` 的 `toggleSwitch`）要么容器本身已 `stopPropagation`、要么 `onChange` 是 setter 语义，均不受影响。
+- 排查手法：在页面里包一层 `Object.getOwnPropertyDescriptor(proto, 'on')` 记录每次 `set .on` 的调用栈，并包 `_toggleSwitch` 打印 `onBefore`，再配合 `requestAnimationFrame` 采样 `on / input.checked / label.classList`。两次「点击后 on 变过又被翻回去」的时间线一眼可见（TS 的 `private` 在运行时只是普通方法，可被 monkey patch）。
+
+### `<input type="checkbox">` 的 `?checked` 属性绑定在用户点过一次后失效
+
+- **架构级：否。** Lit 的 `?checked=${on}` 走 setAttribute。checkbox 的 `checked` **属性**只在「dirty checkedness flag」为 false 时影响 checkedness，一旦用户交互过（含 label 转发的那次），后续改属性不再生效，DOM 会停在旧值（Playwright 会报 `locator resolved to <input checked .../>` 却 `unexpected value "unchecked"`）。要让 DOM 状态跟随组件状态，必须用 `.checked=${on}`（属性绑定）。
