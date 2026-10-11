@@ -395,7 +395,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
         </Scrollable.Root>
       </ViewSidebarTab>
 
-      <ViewSidebarTab tabId="outline" icon={<TocIcon />}>
+      <ViewSidebarTab tabId="outline" icon={<TocIcon />} isDefault>
         <Scrollable.Root className={styles.sidebarScrollArea}>
           <Scrollable.Viewport>
             <EditorOutlinePanel editor={editorContainer?.host ?? null} />

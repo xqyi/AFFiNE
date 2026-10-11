@@ -162,10 +162,17 @@ export const ViewSidebarTab = ({
   tabId,
   icon,
   unmountOnInactive = true,
+  isDefault = false,
 }: React.PropsWithChildren<{
   tabId: string;
   icon: React.ReactNode;
   unmountOnInactive?: boolean;
+  /**
+   * Whether this tab should be the fallback tab when the view has no
+   * explicitly activated sidebar tab. Only takes effect if the tab is
+   * registered; ignored once the user activates a tab.
+   */
+  isDefault?: boolean;
 }>) => {
   const view = useService(ViewService).view;
   const workbench = useService(WorkbenchService).workbench;
@@ -175,11 +182,11 @@ export const ViewSidebarTab = ({
   const isActive = activeTab?.id === tabId && sidebarOpened;
 
   useEffect(() => {
-    view.addSidebarTab(tabId);
+    view.addSidebarTab(tabId, isDefault);
     return () => {
       view.removeSidebarTab(tabId);
     };
-  }, [tabId, view]);
+  }, [tabId, view, isDefault]);
 
   return (
     <>

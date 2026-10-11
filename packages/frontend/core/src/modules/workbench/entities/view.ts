@@ -43,12 +43,20 @@ export class View extends Entity<{
   // _activeTabId may point to a non-existent tab.
   // In this case, we still retain the activeTabId data and wait for the non-existent tab to be mounted.
   _activeSidebarTabId$ = new LiveData<string | null>(null);
+  // fallback tab when no tab has been explicitly activated by the user
+  _defaultSidebarTabId$ = new LiveData<string | null>(null);
   activeSidebarTab$ = LiveData.computed(get => {
     const activeTabId = get(this._activeSidebarTabId$);
+    const defaultTabId = get(this._defaultSidebarTabId$);
     const tabs = get(this.sidebarTabs$);
-    return tabs.length > 0
-      ? (tabs.find(tab => tab.id === activeTabId) ?? tabs[0])
-      : null;
+    if (tabs.length === 0) {
+      return null;
+    }
+    return (
+      tabs.find(tab => tab.id === activeTabId) ??
+      tabs.find(tab => tab.id === defaultTabId) ??
+      tabs[0]
+    );
   });
 
   constructor() {
@@ -151,13 +159,16 @@ export class View extends Entity<{
     this.size$.next(size ?? 100);
   }
 
-  addSidebarTab(id: string) {
+  addSidebarTab(id: string, isDefault = false) {
     this.sidebarTabs$.next([
       ...this.sidebarTabs$.value,
       this.scope.createEntity(SidebarTab, {
         id,
       }),
     ]);
+    if (isDefault) {
+      this._defaultSidebarTabId$.next(id);
+    }
     return id;
   }
 
@@ -165,6 +176,9 @@ export class View extends Entity<{
     this.sidebarTabs$.next(
       this.sidebarTabs$.value.filter(tab => tab.id !== id)
     );
+    if (this._defaultSidebarTabId$.value === id) {
+      this._defaultSidebarTabId$.next(null);
+    }
   }
 
   activeSidebarTab(id: string | null) {
