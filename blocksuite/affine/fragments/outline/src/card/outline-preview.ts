@@ -73,6 +73,11 @@ export class OutlineBlockPreview extends SignalWatcher(
             block.props.type as keyof typeof styles.subtypeStyles
           ]
         : undefined;
+    const leafIndentClass = hasArrow
+      ? indentClass
+      : (styles.leafStyles?.[
+          block.props.type as keyof typeof styles.leafStyles
+        ] ?? indentClass);
 
     // 带箭头节点的缩进 = 自身级数；叶子节点的缩进 = 自身级数 + 1 个汉字宽（1.2em）。
     // 即子节点比父节点多缩进 1 个汉字，且该缩进不包含箭头占位。
@@ -123,11 +128,7 @@ export class OutlineBlockPreview extends SignalWatcher(
         class=${classMap({
           [styles.text]: true,
           [styles.textGeneral]: !indentClass,
-          [hasArrow
-            ? indentClass
-            : (styles.leafStyles?.[
-                block.props.type as keyof typeof styles.leafStyles
-              ] ?? indentClass)]: true,
+          ...(leafIndentClass ? { [leafIndentClass]: true } : {}),
         })}
         >${this._renderToggle()}${previewText}</span
       >
@@ -282,8 +283,8 @@ export class OutlineBlockPreview extends SignalWatcher(
         [arrowToggleCollapsed]: this.toggleCollapsed,
       })}
       data-testid=${this.toggleTestId}
-      @click=${e => e.stopPropagation()}
-      @pointerup=${e => {
+      @click=${(e: MouseEvent) => e.stopPropagation()}
+      @pointerup=${(e: PointerEvent) => {
         e.stopPropagation();
         const ev = new CustomEvent('toggleclick', { detail: e });
         (e.target as HTMLElement)

@@ -187,7 +187,7 @@ export const toggle = style({
   transition: 'transform 150ms ease',
   selectors: {
     '&:hover': {
-      color: cssVarV2('icon/emphasis'),
+      color: cssVarV2('icon/activated'),
     },
   },
 });

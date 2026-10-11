@@ -73,7 +73,7 @@ describe('buildOutlineTree', () => {
       makeHeading('h2', 2),
       makeHeading('h3', 3),
     ]);
-    const collapsed = new Set();
+    const collapsed = new Set<string>();
     const rows = buildOutlineTree(note, collapsed);
     expect(rows.map(r => r.block.id)).toEqual(['h1', 'h2', 'h3']);
     expect(rows[2].hasChildren).toBe(false);
@@ -86,7 +86,7 @@ describe('buildOutlineTree', () => {
       makeHeading('h1b', 1),
       makeHeading('h3', 3),
     ]);
-    const collapsed = new Set();
+    const collapsed = new Set<string>();
     const rows = buildOutlineTree(note, collapsed);
     // h3 is under h1b (its nearest shallower ancestor), not under h1a.
     expect(rows.map(r => r.block.id)).toEqual(['h1a', 'h2', 'h1b', 'h3']);
@@ -187,7 +187,7 @@ describe('buildOutlineTree', () => {
       makeHeading('h1b', 1),
       makeHeading('h4', 4),
     ]);
-    const collapsed = new Set();
+    const collapsed = new Set<string>();
     const rows = buildOutlineTree(note, collapsed);
     expect(rows.map(r => r.block.id)).toEqual(['h1a', 'h2', 'h3', 'h1b', 'h4']);
     const byId = new Map(rows.map(r => [r.block.id as string, r]));

@@ -10,24 +10,26 @@ export interface OutlineRow {
 }
 
 /**
- * Duck-type check for a heading paragraph block, avoiding a direct import of
- * `ParagraphBlockModel` (the unit-test environment cannot reliably run
- * `instanceof` against model classes). A heading is a paragraph whose
+ * Duck-type read of a heading paragraph block's `type`, avoiding a direct
+ * import of `ParagraphBlockModel` (the unit-test environment cannot reliably
+ * run `instanceof` against model classes). A heading is a paragraph whose
  * `type` is one of h1-h6.
  */
-function isHeadingBlock(block: BlockModel): boolean {
-  const flavour = (block as { flavour?: string }).flavour;
-  if (flavour !== 'affine:paragraph') return false;
-  const type = (block as { props: { type$?: { value?: string } } }).props?.type$
+function headingType(block: BlockModel): string | undefined {
+  if ((block as { flavour?: string }).flavour !== 'affine:paragraph') {
+    return;
+  }
+  return (block as { props?: { type$?: { value?: string } } }).props?.type$
     ?.value;
-  return /^h[1-6]$/.test(type ?? '');
+}
+
+function isHeadingBlock(block: BlockModel): boolean {
+  return /^h[1-6]$/.test(headingType(block) ?? '');
 }
 
 function headingLevel(block: BlockModel): number {
-  if (!isHeadingBlock(block)) return 0;
-  const type = (block as { props: { type$: { value: string } } }).props.type$
-    .value;
-  return Number(type.slice(1)) || 7;
+  const type = headingType(block);
+  return type && /^h[1-6]$/.test(type) ? Number(type.slice(1)) || 7 : 0;
 }
 
 /**
