@@ -2,7 +2,7 @@
 
 > 面向没有本次对话上下文的新会话。每次交接时更新前四节，只保留当前任务状态；“可累积避坑”保留经评估、对后续工作有指导意义的经验。记录坑项前，先标注是否属于架构级问题。
 >
-> **编译或打包前必读「编译打包流程」一节**，**尤其是最前面的「⚠️ 路径解析与询问规则」**——所有绝对路径都只是记录值，失效时先问用户，不要自己闷头找。
+> **编译或打包前必读「编译打包流程」一节**，**合并上游发布版前必读「合并上游发布版（vX.Y.Z tag）流程」一节**，**尤其是最前面的「⚠️ 路径解析与询问规则」**——所有绝对路径都只是记录值，失效时先问用户，不要自己闷头找。
 
 ## 当前任务
 
@@ -337,6 +337,121 @@ Pop-Location
 - 「NSIS 打包失败会在仓库根留下完整 app 副本」
 - 「Squirrel 打包会往绿色包目录注入 Squirrel.exe」
 - 「免安装 zip 用 tar -a 生成，不要用 Compress-Archive」
+
+## 合并上游发布版（vX.Y.Z tag）流程
+
+> **执行任何合并前，必须先完整阅读本节。** 记录「上游发布新版本 tag → 把 `xqyi/0274` 上的全部自定义改动搬到新版本上」的判据、步骤与回滚方式。
+
+### 0. 前提：合并发布 tag，不要合并 canary
+
+上游 `toeverything/AFFiNE` 的 `canary` 分支上，workspace 版本号**已被改写成下一个版本**；而**发布 tag 里的版本仍是 `0.27.0`**（真正的版本号由发布流水线在构建时注入，见「编译打包流程 → 1.」）。合并对象选错，冲突面完全不同：
+
+| 合并对象          | 版本号冲突                              | 额外带回的提交           |
+| ----------------- | --------------------------------------- | ------------------------ |
+| 发布 tag `vX.Y.Z` | **无**                                  | 只有该发布版本身         |
+| `origin/canary`   | **123 个 `package.json` + `yarn.lock`** | 整个开发期（本次 32 个） |
+
+**2026-10-11 实测**（以 `v0.27.5-beta.1` 当替身，在临时 worktree 里试合并后回滚，未改动 `xqyi/0274`）：
+
+- 本分支基线 `b4c8548c0` 就是 `v0.27.4` 这个 tag，且它是 `v0.27.5-beta.1` 的祖先，实测 `merge-base(xqyi/0274, v0.27.5-beta.1) == b4c8548c0`；
+- `git merge --no-commit --no-ff v0.27.5-beta.1` → **0 冲突**。只有 3 个文件进入自动合并（`blocksuite/affine/inlines/preset/package.json`、`packages/backend/server/package.json`、`yarn.lock`），合出来的树里各 workspace 版本仍是 `0.27.4`（共 496 个文件发生变化、新增 120 个文件）；
+- 同期 `origin/canary` 的 123 个 `package.json` 已经是 `0.27.5`——这正是 `docs/custom-0.27.4.md` 预判的 124 处冲突的来源。**所以不要合并 canary。**
+
+> 🔴 本节绝对路径均为 2026-10-11 记录值，失效时按「编译打包流程 → ⚠️ 路径解析与询问规则」先问用户，不要自己猜。
+
+### 1. 一次性准备：加上游 remote
+
+本仓库目前只有一个 remote（`origin` = 自己的 fork，`origin/HEAD -> origin/canary`）。上游 tag 现在是从 fork 里取到的，显式加 `upstream` 才可靠：
+
+```powershell
+cd <repo>                                              # 🟢 仓库根，本机 E:\AFFiNE\AFFiNE-0274
+git remote add upstream https://github.com/toeverything/AFFiNE.git
+git fetch upstream --tags
+```
+
+### 2. 确认基线
+
+```powershell
+git log --oneline -1 vX.Y.Z                   # tag 存在
+git merge-base --is-ancestor v0.27.4 vX.Y.Z   # 应为 True（本分支基线就是 v0.27.4）
+git merge-base xqyi/0274 vX.Y.Z               # 应为 b4c8548c0
+git status                                    # 必须干净
+```
+
+### 3. 试合并（不动 xqyi/0274，强烈建议）
+
+用临时 worktree 演练一遍，拿到真实冲突清单与改动规模：
+
+```powershell
+git worktree add --detach E:\AFFiNE\_merge-probe xqyi/0274   # 🔴 临时目录，可任选
+cd E:\AFFiNE\_merge-probe
+git merge --no-commit --no-ff vX.Y.Z
+git diff --name-only --diff-filter=U                          # 冲突清单，期望为空
+git diff --stat HEAD | Select-Object -Last 1                  # 改动规模
+git merge --abort
+cd E:\AFFiNE\AFFiNE-0274
+git worktree remove --force E:\AFFiNE\_merge-probe
+```
+
+> 🟢 用 `git worktree remove` 清理，不要手删目录：递归 `Remove-Item` 在本机被系统策略拦截，而 `git worktree remove` 由 git 自己删，不受影响。
+
+### 4. 正式合并
+
+```powershell
+cd E:\AFFiNE\AFFiNE-0274
+git checkout xqyi/0274
+git merge --no-ff vX.Y.Z -m "chore: merge upstream vX.Y.Z into xqyi/0274"
+```
+
+### 5. 装依赖 + 版本号决策
+
+```powershell
+yarn install                                            # shim 已就绪，见「0. 前置：工具链」
+git grep -l '"version": "0.27.0"' -- "*/package.json"   # 应无输出
+```
+
+版本号要按 `docs/custom-0.27.4.md` 第六节决策点 1 拍板：
+
+- **自托管 server 仍是 0.27.4** → 什么都不用改。合并会保留本分支的 `0.27.4`（实测：合并后各 workspace 仍是 `0.27.4`）。
+- **server 也升到 0.27.5** → 跑 `& $NODE22 scripts\set-version.mjs 0.27.5` 统一改写，**然后必须重新编译打包**：UI「关于」里的版本号是从 `electron-renderer` 的 `package.json` 烘焙进 `web-static/js/*.js` 的（见「编译打包流程 → 1.」）。
+
+### 6. 回归验证
+
+```powershell
+npx tsc -b blocksuite/affine/fragments/outline/tsconfig.json --force
+npx tsc -b packages/frontend/core/tsconfig.json --force
+npx vitest --run blocksuite/affine/fragments/outline/src/__tests__/outline-tree.unit.spec.ts packages/frontend/core/src/modules/workbench/entities/__tests__/view.spec.ts
+```
+
+再手查 `docs/custom-0.27.4.md` 第六节记录的两个决策点：
+
+- `@vanilla-extract/vite-plugin` 在 outline fragment 里应保持本分支主动提升的值（`~5.1.5`），别被上游改回去；
+- `packages/frontend/native/index.{js,d.ts}` 可能出现 `eslint-disable` → `oxlint-disable` 漂移，属原生模块重新生成的无关噪音。
+
+### 7. 重新编译打包
+
+按「编译打包流程 → 2. 完整流程」逐步走完（版本统一 → renderer bundle → robocopy 同步 → build-layers → package-green → squirrel → nsis → portable zip），验收仍用 chunk hash 比对 + 包内特征串 + 绿色包冒烟。**合并本身不改 UI，但产物必须重打**——否则打出来的还是合并前的界面。
+
+### 8. 提交与推送
+
+```powershell
+git push origin xqyi/0274        # 合并提交，不需要 force
+git push origin vX.Y.Z           # 可选：把 tag 也存一份到自己的 fork
+```
+
+### 9. 回滚
+
+```powershell
+git merge --abort                               # 合并进行中 / 有冲突时
+git reset --hard ORIG_HEAD                      # 已合并、尚未推送
+git push --force-with-lease origin xqyi/0274    # 已推送（最后手段，先确认远端只有自己在用）
+```
+
+### 10. 与其他分支的关系
+
+- **只动 `xqyi/0274`。** `canary`（本地 `My_0.27.4` 指向同一条链）是上游开发主线，本分支不从它取代码，也不要合并回去。
+- 本地另有一条 `codex/my0275`（基于更新的 canary，含重新生成的 napi bindings），与 `xqyi/0274` 是两条独立线，**不要混用**。
+- 合并完成后同步更新文档：`docs/custom-0.27.4.md` 的基线换成新 tag（重新跑 `git diff vX.Y.Z..xqyi/0274` 生成清单，可改名 `custom-vX.Y.Z.md`），并刷新本文件前四节。
 
 ## 可累积避坑
 
